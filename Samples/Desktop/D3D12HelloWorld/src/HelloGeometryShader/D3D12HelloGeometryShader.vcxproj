@@ -12,10 +12,10 @@
     </ProjectConfiguration>
   </ItemGroup>
   <PropertyGroup Label="Globals">
-    <ProjectGuid>{5018F6A3-6533-4744-B1FD-727D199FD2E9}</ProjectGuid>
+    <ProjectGuid>{13591239-E52A-494D-976C-DDB73E2F8B5F}</ProjectGuid>
     <Keyword>Win32Proj</Keyword>
     <RootNamespace>D3D12HelloTriangle</RootNamespace>
-    <ProjectName>D3D12HelloTriangle</ProjectName>
+    <ProjectName>D3D12HelloGeometryShader</ProjectName>
     <WindowsTargetPlatformVersion>10.0.19041.0</WindowsTargetPlatformVersion>
   </PropertyGroup>
   <PropertyGroup Label="Globals" Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
@@ -123,15 +123,15 @@
     </FxCompile>
   </ItemDefinitionGroup>
   <ItemGroup>
+    <ClInclude Include="D3D12HelloGeometryShader.h" />
     <ClInclude Include="Win32Application.h" />
-    <ClInclude Include="D3D12HelloTriangle.h" />
     <ClInclude Include="DXSample.h" />
     <ClInclude Include="DXSampleHelper.h" />
     <ClInclude Include="stdafx.h" />
   </ItemGroup>
   <ItemGroup>
+    <ClCompile Include="D3D12HelloGeometryShader.cpp" />
     <ClCompile Include="Win32Application.cpp" />
-    <ClCompile Include="D3D12HelloTriangle.cpp" />
     <ClCompile Include="DXSample.cpp" />
     <ClCompile Include="Main.cpp" />
     <ClCompile Include="stdafx.cpp">
