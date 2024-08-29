@@ -29,7 +29,9 @@ Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "D3D12HelloGenericPrograms",
 EndProject
 Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "D3D12HelloMeshNodes", "HelloMeshNodes\D3D12HelloMeshNodes.vcxproj", "{B9680899-F009-406B-BEEE-D0214C1E7592}"
 EndProject
-Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "D3D12HelloComputeShader", "HelloGeometryShader\D3D12HelloGeometryShader.vcxproj", "{13591239-E52A-494D-976C-DDB73E2F8B5F}"
+Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "D3D12HelloGeometryShader", "HelloGeometryShader\D3D12HelloGeometryShader.vcxproj", "{13591239-E52A-494D-976C-DDB73E2F8B5F}"
+EndProject
+Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "D3D12HelloComputeShader", "HelloComputeShader\D3D12HelloComputeShader.vcxproj", "{EDF839D5-B999-49B5-852A-81E286258BC0}"
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
@@ -93,6 +95,10 @@ Global
 		{13591239-E52A-494D-976C-DDB73E2F8B5F}.Debug|x64.Build.0 = Debug|x64
 		{13591239-E52A-494D-976C-DDB73E2F8B5F}.Release|x64.ActiveCfg = Release|x64
 		{13591239-E52A-494D-976C-DDB73E2F8B5F}.Release|x64.Build.0 = Release|x64
+		{EDF839D5-B999-49B5-852A-81E286258BC0}.Debug|x64.ActiveCfg = Debug|x64
+		{EDF839D5-B999-49B5-852A-81E286258BC0}.Debug|x64.Build.0 = Debug|x64
+		{EDF839D5-B999-49B5-852A-81E286258BC0}.Release|x64.ActiveCfg = Release|x64
+		{EDF839D5-B999-49B5-852A-81E286258BC0}.Release|x64.Build.0 = Release|x64
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
