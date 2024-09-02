@@ -28,6 +28,9 @@
       <Filter>Header Files</Filter>
     </ClInclude>
     <ClInclude Include="D3D12HelloComputeShader.h" />
+    <ClInclude Include="NsightAftermathGpuCrashTracker.h" />
+    <ClInclude Include="NsightAftermathHelpers.h" />
+    <ClInclude Include="NsightAftermathShaderDatabase.h" />
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="stdafx.cpp">
@@ -43,6 +46,8 @@
       <Filter>Source Files</Filter>
     </ClCompile>
     <ClCompile Include="D3D12HelloComputeShader.cpp" />
+    <ClCompile Include="NsightAftermathGpuCrashTracker.cpp" />
+    <ClCompile Include="NsightAftermathShaderDatabase.cpp" />
   </ItemGroup>
   <ItemGroup>
     <CustomBuild Include="shaders.hlsl">

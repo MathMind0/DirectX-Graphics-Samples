@@ -13,6 +13,13 @@
 
 #include "DXSample.h"
 
+// Enables the Nsight Aftermath code instrumentation for GPU crash dump creation.
+#define USE_NSIGHT_AFTERMATH 1
+
+#if defined(USE_NSIGHT_AFTERMATH)
+#include "NsightAftermathGpuCrashTracker.h"
+#endif
+
 using namespace DirectX;
 
 // Note that while ComPtr is used to manage the lifetime of resources on the CPU,
@@ -70,6 +77,7 @@ private:
         OFFSET_VERTEX_BUFFER_UAV,
         OFFSET_VELOCITY_BUFFER_SRV,
         OFFSET_VELOCITY_BUFFER_UAV,
+        DESCRIPTOR_NUM
     };
     
     ComPtr<ID3D12RootSignature> m_rootSignatureInitBlocks;
@@ -94,6 +102,16 @@ private:
     ComPtr<ID3D12Fence> m_fence;
     UINT64 m_fenceValue;
 
+#if defined(USE_NSIGHT_AFTERMATH)
+    // App-managed marker functionality
+    UINT64 m_frameCounter;
+    GpuCrashTracker::MarkerMap m_markerMap;
+
+    // Nsight Aftermath instrumentation
+    GFSDK_Aftermath_ContextHandle m_hAftermathCommandListContext;
+    GpuCrashTracker m_gpuCrashTracker;
+#endif
+    
     void LoadPipeline();
     void LoadAssets();
     void PopulateCommandList();
