@@ -212,25 +212,25 @@ void D3D12HelloConstBuffers::LoadPipeline()
     }
 
     ThrowIfFailed(m_device->CreateCommandAllocator(D3D12_COMMAND_LIST_TYPE_DIRECT, IID_PPV_ARGS(&m_commandAllocator)));
+
+	// Create the command list.
+	ThrowIfFailed(m_device->CreateCommandList(0, D3D12_COMMAND_LIST_TYPE_DIRECT,
+		m_commandAllocator.Get(), nullptr, IID_PPV_ARGS(&m_commandList)));
+	NAME_D3D12_OBJECT(m_commandList);
+
+#if defined(USE_NSIGHT_AFTERMATH)
+	// Create an Nsight Aftermath context handle for setting Aftermath event markers in this command list.
+	AFTERMATH_CHECK_ERROR(GFSDK_Aftermath_DX12_CreateContextHandle(m_commandList.Get(), &m_hAftermathCommandListContext));
+#endif
+    
+	// Command lists are created in the recording state, but there is nothing
+	// to record yet. The main loop expects it to be closed, so close it now.
+	ThrowIfFailed(m_commandList->Close());
 }
 
 // Load the sample assets.
 void D3D12HelloConstBuffers::LoadAssets()
 {
-    // Create the command list.
-    ThrowIfFailed(m_device->CreateCommandList(0, D3D12_COMMAND_LIST_TYPE_DIRECT,
-        m_commandAllocator.Get(), nullptr, IID_PPV_ARGS(&m_commandList)));
-    NAME_D3D12_OBJECT(m_commandList);
-
-#if defined(USE_NSIGHT_AFTERMATH)
-    // Create an Nsight Aftermath context handle for setting Aftermath event markers in this command list.
-    AFTERMATH_CHECK_ERROR(GFSDK_Aftermath_DX12_CreateContextHandle(m_commandList.Get(), &m_hAftermathCommandListContext));
-#endif
-    
-    // Command lists are created in the recording state, but there is nothing
-    // to record yet. The main loop expects it to be closed, so close it now.
-    ThrowIfFailed(m_commandList->Close());
-
 	// Create a root signature consisting of a descriptor table with a single CBV.
 	{
 		D3D12_FEATURE_DATA_ROOT_SIGNATURE featureData = {};
@@ -342,37 +342,7 @@ void D3D12HelloConstBuffers::LoadAssets()
 			NAME_D3D12_OBJECT(m_pipelineStateDraw);
 		}
 	}
-
-	// Create the velocity buffer.
-	{
-		UINT64 bufferSize = 64 * TILE_NUM * TILE_NUM * 2 * 4;
-
-		if (FAILED(m_device->CreateCommittedResource(
-			&CD3DX12_HEAP_PROPERTIES(D3D12_HEAP_TYPE_DEFAULT),
-			D3D12_HEAP_FLAG_NONE,
-			&CD3DX12_RESOURCE_DESC::Buffer(bufferSize),
-			D3D12_RESOURCE_STATE_GENERIC_READ,
-			nullptr,
-			IID_PPV_ARGS(&m_velocityBuffer))))
-		{
-			ThrowIfFailed(m_device->GetDeviceRemovedReason());
-		}
-
-		D3D12_UNORDERED_ACCESS_VIEW_DESC uavDesc = {};
-		uavDesc.Format = DXGI_FORMAT_UNKNOWN;
-		uavDesc.ViewDimension = D3D12_UAV_DIMENSION_BUFFER;
-		uavDesc.Buffer.FirstElement = 0;
-		uavDesc.Buffer.NumElements = 64 * TILE_NUM * TILE_NUM;
-		uavDesc.Buffer.StructureByteStride = 2 * 4;
-		uavDesc.Buffer.CounterOffsetInBytes = 0;
-		uavDesc.Buffer.Flags = D3D12_BUFFER_UAV_FLAG_NONE;
-
-		CD3DX12_CPU_DESCRIPTOR_HANDLE uavHandle(m_heapDescriptors->GetCPUDescriptorHandleForHeapStart(),
-			OFFSET_VELOCITY_BUFFER_UAV, m_descriptorSize);
-		m_device->CreateUnorderedAccessView(m_velocityBuffer.Get(), nullptr, &uavDesc, uavHandle);
-		NAME_D3D12_OBJECT(m_velocityBuffer);
-	}
-
+    
     // Create the vertex buffer.
     {
         UINT vertexBufferSize = 64 * TILE_NUM * TILE_NUM * 7 * 4;
@@ -380,7 +350,7 @@ void D3D12HelloConstBuffers::LoadAssets()
         ThrowIfFailed(m_device->CreateCommittedResource(
             &CD3DX12_HEAP_PROPERTIES(D3D12_HEAP_TYPE_DEFAULT),
             D3D12_HEAP_FLAG_NONE,
-            &CD3DX12_RESOURCE_DESC::Buffer(vertexBufferSize),
+            &CD3DX12_RESOURCE_DESC::Buffer(vertexBufferSize, D3D12_RESOURCE_FLAG_ALLOW_UNORDERED_ACCESS),
             D3D12_RESOURCE_STATE_GENERIC_READ,
             nullptr,
             IID_PPV_ARGS(&m_vertexBuffer)));
@@ -406,7 +376,37 @@ void D3D12HelloConstBuffers::LoadAssets()
 
         m_needInit = true;
     }
-    
+
+    // Create the velocity buffer.
+    {
+	    UINT64 bufferSize = 64 * TILE_NUM * TILE_NUM * 2 * 4;
+
+	    if (FAILED(m_device->CreateCommittedResource(
+            &CD3DX12_HEAP_PROPERTIES(D3D12_HEAP_TYPE_DEFAULT),
+            D3D12_HEAP_FLAG_NONE,
+            &CD3DX12_RESOURCE_DESC::Buffer(bufferSize, D3D12_RESOURCE_FLAG_ALLOW_UNORDERED_ACCESS),
+            D3D12_RESOURCE_STATE_GENERIC_READ,
+            nullptr,
+            IID_PPV_ARGS(&m_velocityBuffer))))
+	    {
+	        ThrowIfFailed(m_device->GetDeviceRemovedReason());
+	    }
+
+	    D3D12_UNORDERED_ACCESS_VIEW_DESC uavDesc = {};
+	    uavDesc.Format = DXGI_FORMAT_UNKNOWN;
+	    uavDesc.ViewDimension = D3D12_UAV_DIMENSION_BUFFER;
+	    uavDesc.Buffer.FirstElement = 0;
+	    uavDesc.Buffer.NumElements = 64 * TILE_NUM * TILE_NUM;
+	    uavDesc.Buffer.StructureByteStride = 2 * 4;
+	    uavDesc.Buffer.CounterOffsetInBytes = 0;
+	    uavDesc.Buffer.Flags = D3D12_BUFFER_UAV_FLAG_NONE;
+
+	    CD3DX12_CPU_DESCRIPTOR_HANDLE uavHandle(m_heapDescriptors->GetCPUDescriptorHandleForHeapStart(),
+            OFFSET_VELOCITY_BUFFER_UAV, m_descriptorSize);
+	    m_device->CreateUnorderedAccessView(m_velocityBuffer.Get(), nullptr, &uavDesc, uavHandle);
+	    NAME_D3D12_OBJECT(m_velocityBuffer);
+    }
+	
     // Create the constant buffer.
     {
         const UINT constantBufferSize = sizeof(InitBlocksConstantBuffer);    // CB size is required to be 256-byte aligned.
