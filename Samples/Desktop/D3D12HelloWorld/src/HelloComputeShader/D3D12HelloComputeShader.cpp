@@ -16,18 +16,20 @@
 #include "NsightAftermathHelpers.h"
 #endif
 
-D3D12HelloConstBuffers::D3D12HelloConstBuffers(UINT width, UINT height, std::wstring name) :
+D3D12HelloComputeShader::D3D12HelloComputeShader(UINT width, UINT height, std::wstring name) :
     DXSample(width, height, name),
     m_frameIndex(0),
     m_viewport(0.0f, 0.0f, static_cast<float>(width), static_cast<float>(height)),
     m_scissorRect(0, 0, static_cast<LONG>(width), static_cast<LONG>(height)),
     m_rtvDescriptorSize(0),
-    m_constantBufferInitBlocksData{},
+    m_constantBufferBlocks{},
+	m_constantBufferBlocksData{},
     m_descriptorSize(0),
     m_fenceEvent(0),
     m_fenceValue(0),
     m_needInit(true),
-    m_vertexBufferView{}
+    m_vertexBufferPosView{},
+	m_vertexBufferColorView{}
 #if defined(USE_NSIGHT_AFTERMATH)
     , m_hAftermathCommandListContext(nullptr)
     , m_gpuCrashTracker(m_markerMap)
@@ -36,14 +38,14 @@ D3D12HelloConstBuffers::D3D12HelloConstBuffers(UINT width, UINT height, std::wst
 {
 }
 
-void D3D12HelloConstBuffers::OnInit()
+void D3D12HelloComputeShader::OnInit()
 {
     LoadPipeline();
     LoadAssets();
 }
 
 // Load the rendering pipeline dependencies.
-void D3D12HelloConstBuffers::LoadPipeline()
+void D3D12HelloComputeShader::LoadPipeline()
 {
     UINT dxgiFactoryFlags = 0;
 
@@ -92,6 +94,7 @@ void D3D12HelloConstBuffers::LoadPipeline()
             D3D_FEATURE_LEVEL_11_0,
             IID_PPV_ARGS(&m_device)
             ));
+    	NAME_D3D12_OBJECT(m_device);
 
         #if defined(USE_NSIGHT_AFTERMATH)
         // Initialize Nsight Aftermath for this device.
@@ -149,6 +152,7 @@ void D3D12HelloConstBuffers::LoadPipeline()
     queueDesc.Type = D3D12_COMMAND_LIST_TYPE_DIRECT;
 
     ThrowIfFailed(m_device->CreateCommandQueue(&queueDesc, IID_PPV_ARGS(&m_commandQueue)));
+	NAME_D3D12_OBJECT(m_commandQueue);
 
     // Describe and create the swap chain.
     DXGI_SWAP_CHAIN_DESC1 swapChainDesc = {};
@@ -184,6 +188,7 @@ void D3D12HelloConstBuffers::LoadPipeline()
         rtvHeapDesc.Type = D3D12_DESCRIPTOR_HEAP_TYPE_RTV;
         rtvHeapDesc.Flags = D3D12_DESCRIPTOR_HEAP_FLAG_NONE;
         ThrowIfFailed(m_device->CreateDescriptorHeap(&rtvHeapDesc, IID_PPV_ARGS(&m_rtvHeap)));
+    	NAME_D3D12_OBJECT(m_rtvHeap);
 
         m_rtvDescriptorSize = m_device->GetDescriptorHandleIncrementSize(D3D12_DESCRIPTOR_HEAP_TYPE_RTV);
 
@@ -195,6 +200,8 @@ void D3D12HelloConstBuffers::LoadPipeline()
         cbvHeapDesc.Flags = D3D12_DESCRIPTOR_HEAP_FLAG_SHADER_VISIBLE;
         cbvHeapDesc.Type = D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV;
         ThrowIfFailed(m_device->CreateDescriptorHeap(&cbvHeapDesc, IID_PPV_ARGS(&m_heapDescriptors)));
+    	NAME_D3D12_OBJECT(m_heapDescriptors);
+    	
         m_descriptorSize = m_device->GetDescriptorHandleIncrementSize(D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV);
     }
 
@@ -212,7 +219,8 @@ void D3D12HelloConstBuffers::LoadPipeline()
     }
 
     ThrowIfFailed(m_device->CreateCommandAllocator(D3D12_COMMAND_LIST_TYPE_DIRECT, IID_PPV_ARGS(&m_commandAllocator)));
-
+	NAME_D3D12_OBJECT(m_commandAllocator);
+	
 	// Create the command list.
 	ThrowIfFailed(m_device->CreateCommandList(0, D3D12_COMMAND_LIST_TYPE_DIRECT,
 		m_commandAllocator.Get(), nullptr, IID_PPV_ARGS(&m_commandList)));
@@ -229,7 +237,7 @@ void D3D12HelloConstBuffers::LoadPipeline()
 }
 
 // Load the sample assets.
-void D3D12HelloConstBuffers::LoadAssets()
+void D3D12HelloComputeShader::LoadAssets()
 {
 	// Create a root signature consisting of a descriptor table with a single CBV.
 	{
@@ -243,31 +251,70 @@ void D3D12HelloConstBuffers::LoadAssets()
 			featureData.HighestVersion = D3D_ROOT_SIGNATURE_VERSION_1_0;
 		}
 
-		ComPtr<ID3DBlob> signature;
-		ComPtr<ID3DBlob> error;
-
 		{
-			CD3DX12_DESCRIPTOR_RANGE1 rangesParam0[1];
-			CD3DX12_DESCRIPTOR_RANGE1 rangesParam1[1];
-			CD3DX12_ROOT_PARAMETER1 rootParameters[3];
+			CD3DX12_DESCRIPTOR_RANGE1 rangesParamPos[1];
+			CD3DX12_DESCRIPTOR_RANGE1 rangesParamColor[1];
+			CD3DX12_DESCRIPTOR_RANGE1 rangesParamVelocity[1];
+			CD3DX12_ROOT_PARAMETER1 rootParameters[INIT_BLOCKS_PARAM_NUM];
 
-			rangesParam0[0].Init(D3D12_DESCRIPTOR_RANGE_TYPE_UAV, 1, 0, 0,
+			rangesParamPos[0].Init(D3D12_DESCRIPTOR_RANGE_TYPE_UAV, 1, 0, 0,
 				D3D12_DESCRIPTOR_RANGE_FLAG_DATA_VOLATILE);
-			rootParameters[0].InitAsDescriptorTable(1, &rangesParam0[0], D3D12_SHADER_VISIBILITY_ALL);
-			rangesParam1[0].Init(D3D12_DESCRIPTOR_RANGE_TYPE_UAV, 1, 1, 0,
+			rootParameters[INIT_BLOCKS_POS_UAV].InitAsDescriptorTable(1, rangesParamPos, D3D12_SHADER_VISIBILITY_ALL);
+			
+			rangesParamColor[0].Init(D3D12_DESCRIPTOR_RANGE_TYPE_UAV, 1, 1, 0,
 				D3D12_DESCRIPTOR_RANGE_FLAG_DATA_VOLATILE);
-			rootParameters[1].InitAsDescriptorTable(1, &rangesParam1[0], D3D12_SHADER_VISIBILITY_ALL);
-			rootParameters[2].InitAsConstantBufferView(0, 0,
-				D3D12_ROOT_DESCRIPTOR_FLAG_DATA_STATIC, D3D12_SHADER_VISIBILITY_ALL);
+			rootParameters[INIT_BLOCKS_COLOR_UAV].InitAsDescriptorTable(1, rangesParamColor, D3D12_SHADER_VISIBILITY_ALL);
+
+			rangesParamVelocity[0].Init(D3D12_DESCRIPTOR_RANGE_TYPE_UAV, 1, 2, 0,
+				D3D12_DESCRIPTOR_RANGE_FLAG_DATA_VOLATILE);
+			rootParameters[INIT_BLOCKS_VELOCITY_UAV].InitAsDescriptorTable(1, rangesParamVelocity, D3D12_SHADER_VISIBILITY_ALL);
+			
+            rootParameters[INIT_BLOCKS_TILE_CB].InitAsConstantBufferView(0, 0,
+                D3D12_ROOT_DESCRIPTOR_FLAG_DATA_STATIC, D3D12_SHADER_VISIBILITY_ALL);
+
 
 			CD3DX12_VERSIONED_ROOT_SIGNATURE_DESC rootSignatureDesc;
-			//rootSignatureDesc.Init_1_1(_countof(rootParameters), rootParameters, 0, nullptr);
-			rootSignatureDesc.Init_1_1(0, nullptr, 0, nullptr);
+			rootSignatureDesc.Init_1_1(_countof(rootParameters), rootParameters, 0, nullptr);
 
+			ComPtr<ID3DBlob> signature;
+			ComPtr<ID3DBlob> error;
 			ThrowIfFailed(D3DX12SerializeVersionedRootSignature(&rootSignatureDesc, featureData.HighestVersion, &signature, &error));
 			ThrowIfFailed(m_device->CreateRootSignature(0, signature->GetBufferPointer(),
 				signature->GetBufferSize(), IID_PPV_ARGS(&m_rootSignatureInitBlocks)));
 			NAME_D3D12_OBJECT(m_rootSignatureInitBlocks);
+		}
+
+		{
+			CD3DX12_DESCRIPTOR_RANGE1 rangesParamPosUAV[1];
+			CD3DX12_DESCRIPTOR_RANGE1 rangesParamPosSRV[1];
+			CD3DX12_DESCRIPTOR_RANGE1 rangesParamVelocityUAV[1];
+			CD3DX12_ROOT_PARAMETER1 rootParameters[UPDATE_BLOCKS_PARAM_NUM];
+
+			rangesParamPosUAV[0].Init(D3D12_DESCRIPTOR_RANGE_TYPE_UAV, 1, 0, 0,
+				D3D12_DESCRIPTOR_RANGE_FLAG_DATA_VOLATILE);
+			rootParameters[UPDATE_BLOCKS_POS_UAV].InitAsDescriptorTable(1, rangesParamPosUAV, D3D12_SHADER_VISIBILITY_ALL);
+			
+			rangesParamPosSRV[0].Init(D3D12_DESCRIPTOR_RANGE_TYPE_SRV, 1, 0, 0,
+				D3D12_DESCRIPTOR_RANGE_FLAG_DATA_STATIC);
+			rootParameters[UPDATE_BLOCKS_POS_SRV].InitAsDescriptorTable(1, rangesParamPosSRV, D3D12_SHADER_VISIBILITY_ALL);
+
+			rangesParamVelocityUAV[0].Init(D3D12_DESCRIPTOR_RANGE_TYPE_UAV, 1, 2, 0,
+				D3D12_DESCRIPTOR_RANGE_FLAG_DATA_VOLATILE);
+			rootParameters[UPDATE_BLOCKS_VELOCITY_UAV].InitAsDescriptorTable(1, rangesParamVelocityUAV, D3D12_SHADER_VISIBILITY_ALL);
+			
+			rootParameters[UPDATE_BLOCKS_TILE_CB].InitAsConstantBufferView(0, 0,
+				D3D12_ROOT_DESCRIPTOR_FLAG_DATA_STATIC, D3D12_SHADER_VISIBILITY_ALL);
+
+
+			CD3DX12_VERSIONED_ROOT_SIGNATURE_DESC rootSignatureDesc;
+			rootSignatureDesc.Init_1_1(_countof(rootParameters), rootParameters, 0, nullptr);
+
+			ComPtr<ID3DBlob> signature;
+			ComPtr<ID3DBlob> error;
+			ThrowIfFailed(D3DX12SerializeVersionedRootSignature(&rootSignatureDesc, featureData.HighestVersion, &signature, &error));
+			ThrowIfFailed(m_device->CreateRootSignature(0, signature->GetBufferPointer(),
+				signature->GetBufferSize(), IID_PPV_ARGS(&m_rootSignatureUpdateBlocks)));
+			NAME_D3D12_OBJECT(m_rootSignatureUpdateBlocks);
 		}
 
 		// Create an empty root signature.
@@ -275,6 +322,8 @@ void D3D12HelloConstBuffers::LoadAssets()
 			CD3DX12_VERSIONED_ROOT_SIGNATURE_DESC rootSignatureDesc;
 			rootSignatureDesc.Init_1_1(0, nullptr, 0, nullptr, D3D12_ROOT_SIGNATURE_FLAG_ALLOW_INPUT_ASSEMBLER_INPUT_LAYOUT);
 
+			ComPtr<ID3DBlob> signature;
+			ComPtr<ID3DBlob> error;
 			ThrowIfFailed(D3DX12SerializeVersionedRootSignature(&rootSignatureDesc, featureData.HighestVersion, &signature, &error));
 			ThrowIfFailed(m_device->CreateRootSignature(0, signature->GetBufferPointer(),
 				signature->GetBufferSize(), IID_PPV_ARGS(&m_rootSignatureDraw)));
@@ -285,6 +334,7 @@ void D3D12HelloConstBuffers::LoadAssets()
 	// Create the pipeline state, which includes compiling and loading shaders.
 	{
 		ComPtr<ID3DBlob> computeShaderInitBlocks;
+		ComPtr<ID3DBlob> computeShaderUpdateBlocks;
 		ComPtr<ID3DBlob> vertexShader;
 		ComPtr<ID3DBlob> pixelShader;
 
@@ -297,6 +347,8 @@ void D3D12HelloConstBuffers::LoadAssets()
 
 		ThrowIfFailed(D3DCompileFromFile(GetAssetFullPath(L"shaders.hlsl").c_str(), nullptr, nullptr,
 			"CSInitBlocks", "cs_5_0", compileFlags, 0, &computeShaderInitBlocks, nullptr));
+		ThrowIfFailed(D3DCompileFromFile(GetAssetFullPath(L"shaders.hlsl").c_str(), nullptr, nullptr,
+			"CSUpdateBlocks", "cs_5_0", compileFlags, 0, &computeShaderUpdateBlocks, nullptr));
 		ThrowIfFailed(D3DCompileFromFile(GetAssetFullPath(L"shaders.hlsl").c_str(), nullptr, nullptr,
 			"VSMain", "vs_5_0", compileFlags, 0, &vertexShader, nullptr));
 		ThrowIfFailed(D3DCompileFromFile(GetAssetFullPath(L"shaders.hlsl").c_str(), nullptr, nullptr,
@@ -313,12 +365,21 @@ void D3D12HelloConstBuffers::LoadAssets()
 		}
 
 		{
+			D3D12_COMPUTE_PIPELINE_STATE_DESC computePsoDesc = {};
+			computePsoDesc.pRootSignature = m_rootSignatureUpdateBlocks.Get();
+			computePsoDesc.CS = CD3DX12_SHADER_BYTECODE(computeShaderUpdateBlocks.Get());
+
+			ThrowIfFailed(m_device->CreateComputePipelineState(&computePsoDesc, IID_PPV_ARGS(&m_pipelineStateUpdateBlocks)));
+			NAME_D3D12_OBJECT(m_pipelineStateUpdateBlocks);
+		}
+
+		{
 			// Define the vertex input layout.
 			D3D12_INPUT_ELEMENT_DESC inputElementDescs[] =
 			{
 				{ "POSITION", 0, DXGI_FORMAT_R32G32B32_FLOAT, 0, 0,
 					D3D12_INPUT_CLASSIFICATION_PER_VERTEX_DATA, 0 },
-				{ "COLOR", 0, DXGI_FORMAT_R32G32B32A32_FLOAT, 0, 12,
+				{ "COLOR", 0, DXGI_FORMAT_R32G32B32_FLOAT, 1, 0,
 					D3D12_INPUT_CLASSIFICATION_PER_VERTEX_DATA, 0 }
 			};
 
@@ -329,6 +390,7 @@ void D3D12HelloConstBuffers::LoadAssets()
 			psoDesc.VS = CD3DX12_SHADER_BYTECODE(vertexShader.Get());
 			psoDesc.PS = CD3DX12_SHADER_BYTECODE(pixelShader.Get());
 			psoDesc.RasterizerState = CD3DX12_RASTERIZER_DESC(D3D12_DEFAULT);
+			psoDesc.RasterizerState.CullMode = D3D12_CULL_MODE_NONE;
 			psoDesc.BlendState = CD3DX12_BLEND_DESC(D3D12_DEFAULT);
 			psoDesc.DepthStencilState.DepthEnable = FALSE;
 			psoDesc.DepthStencilState.StencilEnable = FALSE;
@@ -344,72 +406,108 @@ void D3D12HelloConstBuffers::LoadAssets()
 	}
     
     // Create the vertex buffer.
+	UINT numBlocks = 64 * TILE_NUM * TILE_NUM;
+	UINT numVertices = numBlocks * 6;
+	UINT szBufferPos = numVertices * sizeof(float) * 3;
+	UINT szBufferColor = numVertices * sizeof(float) * 3;
+	UINT szBufferVelocity = numBlocks * sizeof(float) * 2;
+	
     {
-        UINT vertexBufferSize = 64 * TILE_NUM * TILE_NUM * 7 * 4;
-        
-        ThrowIfFailed(m_device->CreateCommittedResource(
-            &CD3DX12_HEAP_PROPERTIES(D3D12_HEAP_TYPE_DEFAULT),
-            D3D12_HEAP_FLAG_NONE,
-            &CD3DX12_RESOURCE_DESC::Buffer(vertexBufferSize, D3D12_RESOURCE_FLAG_ALLOW_UNORDERED_ACCESS),
-            D3D12_RESOURCE_STATE_GENERIC_READ,
-            nullptr,
-            IID_PPV_ARGS(&m_vertexBuffer)));
+		D3D12_UNORDERED_ACCESS_VIEW_DESC uavDesc = {};
+		uavDesc.Format = DXGI_FORMAT_UNKNOWN;
+		uavDesc.ViewDimension = D3D12_UAV_DIMENSION_BUFFER;
+		uavDesc.Buffer.FirstElement = 0;
+		uavDesc.Buffer.NumElements = numVertices;
+		uavDesc.Buffer.StructureByteStride = sizeof(float) * 3;
+		uavDesc.Buffer.CounterOffsetInBytes = 0;
+		uavDesc.Buffer.Flags = D3D12_BUFFER_UAV_FLAG_NONE;
 
-        // Initialize the vertex buffer view.
-        m_vertexBufferView.BufferLocation = m_vertexBuffer->GetGPUVirtualAddress();
-        m_vertexBufferView.StrideInBytes = 7 * 4;
-        m_vertexBufferView.SizeInBytes = vertexBufferSize;
+		D3D12_SHADER_RESOURCE_VIEW_DESC srvDesc = {};
+		srvDesc.Shader4ComponentMapping = D3D12_DEFAULT_SHADER_4_COMPONENT_MAPPING;
+		srvDesc.Format = DXGI_FORMAT_UNKNOWN;
+		srvDesc.ViewDimension = D3D12_SRV_DIMENSION_BUFFER;
+		srvDesc.Buffer.FirstElement = 0;
+		srvDesc.Buffer.NumElements = numVertices;
+		srvDesc.Buffer.StructureByteStride = sizeof(float) * 3;
+		srvDesc.Buffer.Flags = D3D12_BUFFER_SRV_FLAG_NONE;
+				
+		for (int i = 0; i < 2; ++i)
+		{
+			ThrowIfFailed(m_device->CreateCommittedResource(
+				&CD3DX12_HEAP_PROPERTIES(D3D12_HEAP_TYPE_DEFAULT),
+				D3D12_HEAP_FLAG_NONE,
+				&CD3DX12_RESOURCE_DESC::Buffer(szBufferPos, D3D12_RESOURCE_FLAG_ALLOW_UNORDERED_ACCESS),
+				D3D12_RESOURCE_STATE_COMMON,
+				nullptr,
+				IID_PPV_ARGS(&m_vertexBufferPos[i])));
 
-        D3D12_UNORDERED_ACCESS_VIEW_DESC uavDesc = {};
-        uavDesc.Format = DXGI_FORMAT_UNKNOWN;
-        uavDesc.ViewDimension = D3D12_UAV_DIMENSION_BUFFER;
-        uavDesc.Buffer.FirstElement = 0;
-        uavDesc.Buffer.NumElements = 64 * TILE_NUM * TILE_NUM;
-        uavDesc.Buffer.StructureByteStride = 7 * 4;
-        uavDesc.Buffer.CounterOffsetInBytes = 0;
-        uavDesc.Buffer.Flags = D3D12_BUFFER_UAV_FLAG_NONE;
+			NAME_D3D12_OBJECT(m_vertexBufferPos[i]);
+		
+			// Initialize the vertex buffer view.
+			m_vertexBufferPosView[i].BufferLocation = m_vertexBufferPos[i]->GetGPUVirtualAddress();
+			m_vertexBufferPosView[i].StrideInBytes = sizeof(float) * 3;
+			m_vertexBufferPosView[i].SizeInBytes = szBufferPos;
 
-        CD3DX12_CPU_DESCRIPTOR_HANDLE uavHandle(m_heapDescriptors->GetCPUDescriptorHandleForHeapStart(),
-            OFFSET_VERTEX_BUFFER_UAV, m_descriptorSize);
-        m_device->CreateUnorderedAccessView(m_vertexBuffer.Get(), nullptr, &uavDesc, uavHandle);
-        NAME_D3D12_OBJECT(m_vertexBuffer);
+			CD3DX12_CPU_DESCRIPTOR_HANDLE uavHandle(m_heapDescriptors->GetCPUDescriptorHandleForHeapStart(),
+				i == 0 ? OFFSET_VERTEX_BUFFER_POS_UAV0 : OFFSET_VERTEX_BUFFER_POS_UAV1, m_descriptorSize);
+			m_device->CreateUnorderedAccessView(m_vertexBufferPos[i].Get(), nullptr, &uavDesc, uavHandle);
+
+			CD3DX12_CPU_DESCRIPTOR_HANDLE srvHandle(m_heapDescriptors->GetCPUDescriptorHandleForHeapStart(),
+				i == 0 ? OFFSET_VERTEX_BUFFER_POS_SRV0 : OFFSET_VERTEX_BUFFER_POS_SRV1, m_descriptorSize);
+			m_device->CreateShaderResourceView(m_vertexBufferPos[i].Get(), &srvDesc, srvHandle);
+		}
+		
+		ThrowIfFailed(m_device->CreateCommittedResource(
+			&CD3DX12_HEAP_PROPERTIES(D3D12_HEAP_TYPE_DEFAULT),
+			D3D12_HEAP_FLAG_NONE,
+			&CD3DX12_RESOURCE_DESC::Buffer(szBufferColor, D3D12_RESOURCE_FLAG_ALLOW_UNORDERED_ACCESS),
+			D3D12_RESOURCE_STATE_COMMON,
+			nullptr,
+			IID_PPV_ARGS(&m_vertexBufferColor)));
+
+		NAME_D3D12_OBJECT(m_vertexBufferColor);
+
+		// Initialize the vertex buffer view.
+		m_vertexBufferColorView.BufferLocation = m_vertexBufferColor->GetGPUVirtualAddress();
+		m_vertexBufferColorView.StrideInBytes = sizeof(float) * 3;
+		m_vertexBufferColorView.SizeInBytes = szBufferColor;		
+
+		CD3DX12_CPU_DESCRIPTOR_HANDLE uavHandle(m_heapDescriptors->GetCPUDescriptorHandleForHeapStart(),
+			OFFSET_VERTEX_BUFFER_COLOR_UAV, m_descriptorSize);
+		m_device->CreateUnorderedAccessView(m_vertexBufferColor.Get(), nullptr, &uavDesc, uavHandle);
 
         m_needInit = true;
     }
 
     // Create the velocity buffer.
-    {
-	    UINT64 bufferSize = 64 * TILE_NUM * TILE_NUM * 2 * 4;
-
-	    if (FAILED(m_device->CreateCommittedResource(
+    {	    
+	    ThrowIfFailed(m_device->CreateCommittedResource(
             &CD3DX12_HEAP_PROPERTIES(D3D12_HEAP_TYPE_DEFAULT),
             D3D12_HEAP_FLAG_NONE,
-            &CD3DX12_RESOURCE_DESC::Buffer(bufferSize, D3D12_RESOURCE_FLAG_ALLOW_UNORDERED_ACCESS),
-            D3D12_RESOURCE_STATE_GENERIC_READ,
+            &CD3DX12_RESOURCE_DESC::Buffer(szBufferVelocity, D3D12_RESOURCE_FLAG_ALLOW_UNORDERED_ACCESS),
+            D3D12_RESOURCE_STATE_COMMON,
             nullptr,
-            IID_PPV_ARGS(&m_velocityBuffer))))
-	    {
-	        ThrowIfFailed(m_device->GetDeviceRemovedReason());
-	    }
+            IID_PPV_ARGS(&m_velocityBuffer)));
+
+		NAME_D3D12_OBJECT(m_velocityBuffer);
 
 	    D3D12_UNORDERED_ACCESS_VIEW_DESC uavDesc = {};
 	    uavDesc.Format = DXGI_FORMAT_UNKNOWN;
 	    uavDesc.ViewDimension = D3D12_UAV_DIMENSION_BUFFER;
 	    uavDesc.Buffer.FirstElement = 0;
-	    uavDesc.Buffer.NumElements = 64 * TILE_NUM * TILE_NUM;
-	    uavDesc.Buffer.StructureByteStride = 2 * 4;
+	    uavDesc.Buffer.NumElements = numBlocks;
+	    uavDesc.Buffer.StructureByteStride = sizeof(float) * 2;
 	    uavDesc.Buffer.CounterOffsetInBytes = 0;
 	    uavDesc.Buffer.Flags = D3D12_BUFFER_UAV_FLAG_NONE;
 
 	    CD3DX12_CPU_DESCRIPTOR_HANDLE uavHandle(m_heapDescriptors->GetCPUDescriptorHandleForHeapStart(),
             OFFSET_VELOCITY_BUFFER_UAV, m_descriptorSize);
 	    m_device->CreateUnorderedAccessView(m_velocityBuffer.Get(), nullptr, &uavDesc, uavHandle);
-	    NAME_D3D12_OBJECT(m_velocityBuffer);
     }
 	
     // Create the constant buffer.
     {
-        const UINT constantBufferSize = sizeof(InitBlocksConstantBuffer);    // CB size is required to be 256-byte aligned.
+        const UINT constantBufferSize = sizeof(BlocksConstantBuffer);    // CB size is required to be 256-byte aligned.
 
         ThrowIfFailed(m_device->CreateCommittedResource(
             &CD3DX12_HEAP_PROPERTIES(D3D12_HEAP_TYPE_UPLOAD),
@@ -417,20 +515,20 @@ void D3D12HelloConstBuffers::LoadAssets()
             &CD3DX12_RESOURCE_DESC::Buffer(constantBufferSize),
             D3D12_RESOURCE_STATE_GENERIC_READ,
             nullptr,
-            IID_PPV_ARGS(&m_constantBufferInitBlocks)));
+            IID_PPV_ARGS(&m_constantBufferBlocks)));
 
-        NAME_D3D12_OBJECT(m_constantBufferInitBlocks);
+        NAME_D3D12_OBJECT(m_constantBufferBlocks);
         
         // Map and initialize the constant buffer. We don't unmap this until the
         // app closes. Keeping things mapped for the lifetime of the resource is okay.
-        m_constantBufferInitBlocksData.nTiles.x = TILE_NUM;
-        m_constantBufferInitBlocksData.blockWidth.x = 1.f / (8 * TILE_NUM);
+        m_constantBufferBlocksData.nTiles.x = TILE_NUM;
+        m_constantBufferBlocksData.blockWidth.x = 2.f / (8 * TILE_NUM);
 
         UINT8* pData = nullptr;
         CD3DX12_RANGE readRange(0, 0);        // We do not intend to read from this resource on the CPU.
-        ThrowIfFailed(m_constantBufferInitBlocks->Map(0, &readRange, reinterpret_cast<void**>(&pData)));
-        memcpy(pData, &m_constantBufferInitBlocksData, sizeof(m_constantBufferInitBlocksData));
-        m_constantBufferInitBlocks->Unmap(0, nullptr);
+        ThrowIfFailed(m_constantBufferBlocks->Map(0, &readRange, reinterpret_cast<void**>(&pData)));
+        memcpy(pData, &m_constantBufferBlocksData, sizeof(m_constantBufferBlocksData));
+        m_constantBufferBlocks->Unmap(0, nullptr);
     }
 
     // Create synchronization objects and wait until assets have been uploaded to the GPU.
@@ -453,12 +551,12 @@ void D3D12HelloConstBuffers::LoadAssets()
 }
 
 // Update frame-based values.
-void D3D12HelloConstBuffers::OnUpdate()
+void D3D12HelloComputeShader::OnUpdate()
 {
 }
 
 // Render the scene.
-void D3D12HelloConstBuffers::OnRender()
+void D3D12HelloComputeShader::OnRender()
 {
     // Record all the commands we need to render the scene into the command list.
     PopulateCommandList();
@@ -512,7 +610,7 @@ void D3D12HelloConstBuffers::OnRender()
     WaitForPreviousFrame();
 }
 
-void D3D12HelloConstBuffers::OnDestroy()
+void D3D12HelloComputeShader::OnDestroy()
 {
     // Ensure that the GPU is no longer referencing resources that are about to be
     // cleaned up by the destructor.
@@ -522,7 +620,7 @@ void D3D12HelloConstBuffers::OnDestroy()
 }
 
 // Fill the command list with all the render commands and dependent state.
-void D3D12HelloConstBuffers::PopulateCommandList()
+void D3D12HelloComputeShader::PopulateCommandList()
 {
     // Command list allocators can only be reset when the associated 
     // command lists have finished execution on the GPU; apps should use 
@@ -536,37 +634,92 @@ void D3D12HelloConstBuffers::PopulateCommandList()
 
     ID3D12DescriptorHeap* ppHeaps[] = { m_heapDescriptors.Get() };
     m_commandList->SetDescriptorHeaps(_countof(ppHeaps), ppHeaps);
-    
+
+	UINT idxVertexBufferUAV = m_frameIndex & 0x01;
+	UINT idxVertexBufferSRV = 1 - idxVertexBufferUAV;
+	INT offsetVertexBufferUAV = idxVertexBufferUAV ? OFFSET_VERTEX_BUFFER_POS_UAV1 : OFFSET_VERTEX_BUFFER_POS_UAV0;
+	INT offsetVertexBufferSRV = idxVertexBufferSRV ? OFFSET_VERTEX_BUFFER_POS_SRV1 : OFFSET_VERTEX_BUFFER_POS_SRV0;
+	
     if (m_needInit)
     {
-        m_commandList->SetPipelineState(m_pipelineStateInitBlocks.Get());
+    	CD3DX12_RESOURCE_BARRIER barriersBefore[] = {
+    		CD3DX12_RESOURCE_BARRIER::Transition(m_vertexBufferPos[idxVertexBufferUAV].Get(),
+				D3D12_RESOURCE_STATE_VERTEX_AND_CONSTANT_BUFFER,
+				D3D12_RESOURCE_STATE_UNORDERED_ACCESS
+				)
+		};
+    	m_commandList->ResourceBarrier(_countof(barriersBefore), barriersBefore);
+    	
         m_commandList->SetComputeRootSignature(m_rootSignatureInitBlocks.Get());
+    	m_commandList->SetPipelineState(m_pipelineStateInitBlocks.Get());
         
-        CD3DX12_GPU_DESCRIPTOR_HANDLE uavHandleVertexBuffer(m_heapDescriptors->GetGPUDescriptorHandleForHeapStart(),
-            OFFSET_VERTEX_BUFFER_UAV, m_descriptorSize);
+        CD3DX12_GPU_DESCRIPTOR_HANDLE uavHandleVertexBufferPos(m_heapDescriptors->GetGPUDescriptorHandleForHeapStart(),
+            offsetVertexBufferUAV, m_descriptorSize);
+    	CD3DX12_GPU_DESCRIPTOR_HANDLE uavHandleVertexBufferColor(m_heapDescriptors->GetGPUDescriptorHandleForHeapStart(),
+			OFFSET_VERTEX_BUFFER_COLOR_UAV, m_descriptorSize);
         CD3DX12_GPU_DESCRIPTOR_HANDLE uavHandleVelocityBuffer(m_heapDescriptors->GetGPUDescriptorHandleForHeapStart(),
             OFFSET_VELOCITY_BUFFER_UAV, m_descriptorSize);
         
-        m_commandList->SetComputeRootDescriptorTable(0, uavHandleVertexBuffer);
-        m_commandList->SetComputeRootDescriptorTable(1, uavHandleVelocityBuffer);
-        m_commandList->SetComputeRootConstantBufferView(2, m_constantBufferInitBlocks->GetGPUVirtualAddress());
+        m_commandList->SetComputeRootDescriptorTable(INIT_BLOCKS_POS_UAV, uavHandleVertexBufferPos);
+    	m_commandList->SetComputeRootDescriptorTable(INIT_BLOCKS_COLOR_UAV, uavHandleVertexBufferColor);
+        m_commandList->SetComputeRootDescriptorTable(INIT_BLOCKS_VELOCITY_UAV, uavHandleVelocityBuffer);
+        m_commandList->SetComputeRootConstantBufferView(INIT_BLOCKS_TILE_CB, m_constantBufferBlocks->GetGPUVirtualAddress());
 
         m_commandList->Dispatch(TILE_NUM, TILE_NUM, 1);
 
-        CD3DX12_RESOURCE_BARRIER barriers[2] = {
-            CD3DX12_RESOURCE_BARRIER::Transition(m_vertexBuffer.Get(),
+        CD3DX12_RESOURCE_BARRIER barriers[] = {
+            CD3DX12_RESOURCE_BARRIER::Transition(m_vertexBufferPos[idxVertexBufferUAV].Get(),
                 D3D12_RESOURCE_STATE_UNORDERED_ACCESS,
                 D3D12_RESOURCE_STATE_VERTEX_AND_CONSTANT_BUFFER),
+        	CD3DX12_RESOURCE_BARRIER::Transition(m_vertexBufferColor.Get(),
+        		D3D12_RESOURCE_STATE_UNORDERED_ACCESS,
+        		D3D12_RESOURCE_STATE_VERTEX_AND_CONSTANT_BUFFER),
             CD3DX12_RESOURCE_BARRIER::Transition(m_velocityBuffer.Get(),
                 D3D12_RESOURCE_STATE_UNORDERED_ACCESS,
                 D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE)
         };
         
-        m_commandList->ResourceBarrier(2, barriers);
+        m_commandList->ResourceBarrier(_countof(barriers), barriers);
         m_needInit = false;
     }
+	else
+	{
+		CD3DX12_RESOURCE_BARRIER barriersBefore[] = {
+			CD3DX12_RESOURCE_BARRIER::Transition(m_vertexBufferPos[idxVertexBufferUAV].Get(),
+				D3D12_RESOURCE_STATE_VERTEX_AND_CONSTANT_BUFFER,
+				D3D12_RESOURCE_STATE_UNORDERED_ACCESS
+				)
+		};
+        m_commandList->ResourceBarrier(_countof(barriersBefore), barriersBefore);
+
+		m_commandList->SetComputeRootSignature(m_rootSignatureUpdateBlocks.Get());
+		m_commandList->SetPipelineState(m_pipelineStateUpdateBlocks.Get());
+		        
+		CD3DX12_GPU_DESCRIPTOR_HANDLE uavHandleVertexBufferPosUAV(m_heapDescriptors->GetGPUDescriptorHandleForHeapStart(),
+			offsetVertexBufferUAV, m_descriptorSize);
+		CD3DX12_GPU_DESCRIPTOR_HANDLE uavHandleVertexBufferPosSRV(m_heapDescriptors->GetGPUDescriptorHandleForHeapStart(),
+			offsetVertexBufferSRV, m_descriptorSize);
+		CD3DX12_GPU_DESCRIPTOR_HANDLE uavHandleVelocityBuffer(m_heapDescriptors->GetGPUDescriptorHandleForHeapStart(),
+			OFFSET_VELOCITY_BUFFER_UAV, m_descriptorSize);
+        
+		m_commandList->SetComputeRootDescriptorTable(UPDATE_BLOCKS_POS_UAV, uavHandleVertexBufferPosUAV);
+		m_commandList->SetComputeRootDescriptorTable(UPDATE_BLOCKS_POS_SRV, uavHandleVertexBufferPosSRV);
+		m_commandList->SetComputeRootDescriptorTable(UPDATE_BLOCKS_VELOCITY_UAV, uavHandleVelocityBuffer);
+		m_commandList->SetComputeRootConstantBufferView(UPDATE_BLOCKS_TILE_CB, m_constantBufferBlocks->GetGPUVirtualAddress());
+
+		m_commandList->Dispatch(TILE_NUM, TILE_NUM, 1);
+
+		CD3DX12_RESOURCE_BARRIER barriersAfter[] = {
+			CD3DX12_RESOURCE_BARRIER::Transition(m_vertexBufferPos[idxVertexBufferUAV].Get(),
+				D3D12_RESOURCE_STATE_UNORDERED_ACCESS,
+				D3D12_RESOURCE_STATE_VERTEX_AND_CONSTANT_BUFFER)
+		};
+        
+		m_commandList->ResourceBarrier(_countof(barriersAfter), barriersAfter);
+	}
     
     // Set necessary state.
+	m_commandList->SetPipelineState(m_pipelineStateDraw.Get());
     m_commandList->SetGraphicsRootSignature(m_rootSignatureDraw.Get());
 
     m_commandList->RSSetViewports(1, &m_viewport);
@@ -638,7 +791,8 @@ void D3D12HelloConstBuffers::PopulateCommandList()
     
     m_commandList->ClearRenderTargetView(rtvHandle, clearColor, 0, nullptr);
     m_commandList->IASetPrimitiveTopology(D3D_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
-    m_commandList->IASetVertexBuffers(0, 1, &m_vertexBufferView);
+    m_commandList->IASetVertexBuffers(0, 1, &m_vertexBufferPosView[idxVertexBufferUAV]);
+	m_commandList->IASetVertexBuffers(1, 1, &m_vertexBufferPosView[idxVertexBufferUAV]);
 
 #if defined(USE_NSIGHT_AFTERMATH)
     // Inject a marker in the command list before the draw call.
@@ -657,7 +811,7 @@ void D3D12HelloConstBuffers::PopulateCommandList()
     ThrowIfFailed(m_commandList->Close());
 }
 
-void D3D12HelloConstBuffers::WaitForPreviousFrame()
+void D3D12HelloComputeShader::WaitForPreviousFrame()
 {
     // WAITING FOR THE FRAME TO COMPLETE BEFORE CONTINUING IS NOT BEST PRACTICE.
     // This is code implemented as such for simplicity. The D3D12HelloFrameBuffering
