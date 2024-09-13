@@ -25,7 +25,7 @@ struct PSInput
 static const float ONE_OVER_MAX_UINT = 1.0 / 0xFFFFFFFF;
 static const float ONE_OVER_255 = 1.0 / 0xFF;
 
-cbuffer InitBlocksConstantBuffer : register(b0)
+cbuffer ConstantBufferBlocks : register(b0)
 {
     uint4 nTiles;
     float4 blockWidth;
