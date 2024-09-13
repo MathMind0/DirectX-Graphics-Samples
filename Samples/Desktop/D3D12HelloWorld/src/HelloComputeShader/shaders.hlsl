@@ -22,7 +22,7 @@ struct PSInput
     float4 color : COLOR;
 };
 
-static const float ONE_OVER_MAX_UINT = 1.0 / 0xFFFFFFFF;
+//static const float ONE_OVER_MAX_UINT = 1.0 / 0xFFFFFFFF;
 static const float ONE_OVER_255 = 1.0 / 0xFF;
 
 cbuffer ConstantBufferBlocks : register(b0)
