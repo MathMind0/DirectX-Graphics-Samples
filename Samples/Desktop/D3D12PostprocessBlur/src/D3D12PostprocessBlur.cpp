@@ -13,9 +13,9 @@
 #include "D3D12PostprocessBlur.h"
 #include "FrameResource.h"
 
-D3D12Multithreading* D3D12Multithreading::s_app = nullptr;
+D3D12PostprocessBlur* D3D12PostprocessBlur::s_app = nullptr;
 
-D3D12Multithreading::D3D12Multithreading(UINT width, UINT height, std::wstring name) :
+D3D12PostprocessBlur::D3D12PostprocessBlur(UINT width, UINT height, std::wstring name) :
     DXSample(width, height, name),
     m_frameIndex(0),
     m_viewport(0.0f, 0.0f, static_cast<float>(width), static_cast<float>(height)),
@@ -35,12 +35,12 @@ D3D12Multithreading::D3D12Multithreading(UINT width, UINT height, std::wstring n
     ThrowIfFailed(DXGIDeclareAdapterRemovalSupport());
 }
 
-D3D12Multithreading::~D3D12Multithreading()
+D3D12PostprocessBlur::~D3D12PostprocessBlur()
 {
     s_app = nullptr;
 }
 
-void D3D12Multithreading::OnInit()
+void D3D12PostprocessBlur::OnInit()
 {
     LoadPipeline();
     LoadAssets();
@@ -48,7 +48,7 @@ void D3D12Multithreading::OnInit()
 }
 
 // Load the rendering pipeline dependencies.
-void D3D12Multithreading::LoadPipeline()
+void D3D12PostprocessBlur::LoadPipeline()
 {
     UINT dxgiFactoryFlags = 0;
 
@@ -175,7 +175,7 @@ void D3D12Multithreading::LoadPipeline()
 }
 
 // Load the sample assets.
-void D3D12Multithreading::LoadAssets()
+void D3D12PostprocessBlur::LoadAssets()
 {
     // Create the root signature.
     {
@@ -601,7 +601,7 @@ void D3D12Multithreading::LoadAssets()
 }
 
 // Initialize threads and events.
-void D3D12Multithreading::LoadContexts()
+void D3D12PostprocessBlur::LoadContexts()
 {
 #if !SINGLETHREADED
     struct threadwrapper
@@ -609,7 +609,7 @@ void D3D12Multithreading::LoadContexts()
         static unsigned int WINAPI thunk(LPVOID lpParameter)
         {
             ThreadParameter* parameter = reinterpret_cast<ThreadParameter*>(lpParameter);
-            D3D12Multithreading::Get()->WorkerThread(parameter->threadIndex);
+            D3D12PostprocessBlur::Get()->WorkerThread(parameter->threadIndex);
             return 0;
         }
     };
@@ -653,7 +653,7 @@ void D3D12Multithreading::LoadContexts()
 }
 
 // Update frame-based values.
-void D3D12Multithreading::OnUpdate()
+void D3D12PostprocessBlur::OnUpdate()
 {
     m_timer.Tick(NULL);
 
@@ -715,7 +715,7 @@ void D3D12Multithreading::OnUpdate()
 }
 
 // Render the scene.
-void D3D12Multithreading::OnRender()
+void D3D12PostprocessBlur::OnRender()
 {
     try
     {
@@ -793,7 +793,7 @@ void D3D12Multithreading::OnRender()
 }
 
 // Release sample's D3D objects.
-void D3D12Multithreading::ReleaseD3DResources()
+void D3D12PostprocessBlur::ReleaseD3DResources()
 {
     m_fence.Reset();
     ResetComPtrArray(&m_renderTargets);
@@ -803,7 +803,7 @@ void D3D12Multithreading::ReleaseD3DResources()
 }
 
 // Tears down D3D resources and reinitializes them.
-void D3D12Multithreading::RestoreD3DResources()
+void D3D12PostprocessBlur::RestoreD3DResources()
 {
     // Give GPU a chance to finish its execution in progress.
     try
@@ -819,7 +819,7 @@ void D3D12Multithreading::RestoreD3DResources()
 }
 
 // Wait for pending GPU work to complete.
-void D3D12Multithreading::WaitForGpu()
+void D3D12PostprocessBlur::WaitForGpu()
 {
     // Schedule a Signal command in the queue.
     ThrowIfFailed(m_commandQueue->Signal(m_fence.Get(), m_fenceValue));
@@ -829,7 +829,7 @@ void D3D12Multithreading::WaitForGpu()
     WaitForSingleObjectEx(m_fenceEvent, INFINITE, FALSE);
 }
 
-void D3D12Multithreading::OnDestroy()
+void D3D12PostprocessBlur::OnDestroy()
 {
     // Ensure that the GPU is no longer referencing resources that are about to be
     // cleaned up by the destructor.
@@ -865,7 +865,7 @@ void D3D12Multithreading::OnDestroy()
     }
 }
 
-void D3D12Multithreading::OnKeyDown(UINT8 key)
+void D3D12PostprocessBlur::OnKeyDown(UINT8 key)
 {
     switch (key)
     {
@@ -887,7 +887,7 @@ void D3D12Multithreading::OnKeyDown(UINT8 key)
     }
 }
 
-void D3D12Multithreading::OnKeyUp(UINT8 key)
+void D3D12PostprocessBlur::OnKeyUp(UINT8 key)
 {
     switch (key)
     {
@@ -907,7 +907,7 @@ void D3D12Multithreading::OnKeyUp(UINT8 key)
 }
 
 // Assemble the CommandListPre command list.
-void D3D12Multithreading::BeginFrame()
+void D3D12PostprocessBlur::BeginFrame()
 {
     m_pCurrentFrameResource->Init();
 
@@ -924,7 +924,7 @@ void D3D12Multithreading::BeginFrame()
 }
 
 // Assemble the CommandListMid command list.
-void D3D12Multithreading::MidFrame()
+void D3D12PostprocessBlur::MidFrame()
 {
     // Transition our shadow map from the shadow pass to readable in the scene pass.
     m_pCurrentFrameResource->SwapBarriers();
@@ -933,7 +933,7 @@ void D3D12Multithreading::MidFrame()
 }
 
 // Assemble the CommandListPost command list.
-void D3D12Multithreading::EndFrame()
+void D3D12PostprocessBlur::EndFrame()
 {
     m_pCurrentFrameResource->Finish();
 
@@ -945,7 +945,7 @@ void D3D12Multithreading::EndFrame()
 
 // Worker thread body. workerIndex is an integer from 0 to NumContexts 
 // describing the worker's thread index.
-void D3D12Multithreading::WorkerThread(int threadIndex)
+void D3D12PostprocessBlur::WorkerThread(int threadIndex)
 {
     assert(threadIndex >= 0);
     assert(threadIndex < NumContexts);
@@ -1030,7 +1030,7 @@ void D3D12Multithreading::WorkerThread(int threadIndex)
 #endif
 }
 
-void D3D12Multithreading::SetCommonPipelineState(ID3D12GraphicsCommandList* pCommandList)
+void D3D12PostprocessBlur::SetCommonPipelineState(ID3D12GraphicsCommandList* pCommandList)
 {
     pCommandList->SetGraphicsRootSignature(m_rootSignature.Get());
 

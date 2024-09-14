@@ -49,13 +49,13 @@ struct SceneConstantBuffer
     LightState lights[NumLights];
 };
 
-class D3D12Multithreading : public DXSample
+class D3D12PostprocessBlur : public DXSample
 {
 public:
-    D3D12Multithreading(UINT width, UINT height, std::wstring name);
-    virtual ~D3D12Multithreading();
+    D3D12PostprocessBlur(UINT width, UINT height, std::wstring name);
+    virtual ~D3D12PostprocessBlur();
 
-    static D3D12Multithreading* Get() { return s_app; }
+    static D3D12PostprocessBlur* Get() { return s_app; }
 
     virtual void OnInit();
     virtual void OnUpdate();
@@ -121,7 +121,7 @@ private:
     UINT64 m_fenceValue;
 
     // Singleton object so that worker threads can share members.
-    static D3D12Multithreading* s_app; 
+    static D3D12PostprocessBlur* s_app; 
 
     // Frame resources.
     FrameResource* m_frameResources[FrameCount];
