@@ -1,3 +1,14 @@
+#define BLUR_RADIUS 5
+static const float weight[BLUR_RADIUS] = {0.3829, 0.2417, 0.0606, 0.0060, 0.0002};
+
+struct ScreenInfo
+{
+    uint2 size;
+};
+
+Texture2D texSceneColor : register(t0);
+ConstantBuffer<ScreenInfo> screenInfo : register(b0);
+
 float4 VSPostprocess(uint vertexID : SV_VertexID)
 {
     switch (vertexID)
@@ -12,18 +23,6 @@ float4 VSPostprocess(uint vertexID : SV_VertexID)
         return 0.0;
     }  
 }
-
-#define BLUR_RADIUS 5
-static const float weight[BLUR_RADIUS] = {0.3829, 0.2417, 0.0606, 0.0060, 0.0002};
-
-struct ScreenInfo
-{
-    uint2 size;
-};
-
-
-Texture2D texSceneColor : register(t0, PostprocessBlurNaive);
-ConstantBuffer<ScreenInfo> screenInfo : register(b0, PostprocessBlurNaive);
 
 float4 PSPostprocessBlurNaive(float4 screenPos : SV_Position) : SV_Target
 {
