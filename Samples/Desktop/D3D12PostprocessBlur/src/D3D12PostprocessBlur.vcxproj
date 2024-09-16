@@ -121,6 +121,7 @@
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="D3D12PostprocessBlur.cpp" />
+    <ClCompile Include="Postprocess.hlsl" />
     <ClCompile Include="Win32Application.cpp" />
     <ClCompile Include="Camera.cpp" />
     <ClCompile Include="DXSample.cpp" />
