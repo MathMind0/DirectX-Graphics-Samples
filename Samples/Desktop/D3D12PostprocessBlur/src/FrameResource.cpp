@@ -169,6 +169,28 @@ FrameResource::FrameResource(ID3D12Device* pDevice, ID3D12PipelineState* pPso, I
     m_batchSubmit[_countof(m_shadowCommandLists) + 1] = m_commandLists[CommandListMid].Get();
     memcpy(m_batchSubmit + _countof(m_shadowCommandLists) + 2, m_sceneCommandLists, _countof(m_sceneCommandLists) * sizeof(ID3D12CommandList*));
     m_batchSubmit[batchSize - 1] = m_commandLists[CommandListPost].Get();
+
+    // Resource initialization for postprocess.
+    CD3DX12_RESOURCE_DESC descSceneColor = CD3DX12_RESOURCE_DESC::Tex2D(
+        DXGI_FORMAT_R8G8B8A8_UNORM,
+        static_cast<UINT>(pViewport->Width),
+        static_cast<UINT>(pViewport->Height),
+        1, 1, 1, 0,
+        D3D12_RESOURCE_FLAG_ALLOW_RENDER_TARGET);
+
+    FLOAT clearColor[] = {0.f, 0.f, 0.f, 0.f};
+    CD3DX12_CLEAR_VALUE clearSceneColor(DXGI_FORMAT_R8G8B8A8_UNORM,
+        clearColor);
+        
+    ThrowIfFailed(pDevice->CreateCommittedResource(
+        &CD3DX12_HEAP_PROPERTIES(D3D12_HEAP_TYPE_DEFAULT),
+        D3D12_HEAP_FLAG_NONE,
+        &descSceneColor,
+        D3D12_RESOURCE_STATE_RENDER_TARGET,
+        &clearSceneColor,
+        IID_PPV_ARGS(&m_texSceneColor)));
+
+    NAME_D3D12_OBJECT(m_texSceneColor);
 }
 
 FrameResource::~FrameResource()

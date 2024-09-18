@@ -42,20 +42,32 @@ private:
     D3D12_CPU_DESCRIPTOR_HANDLE m_shadowDepthView;
     ComPtr<ID3D12Resource> m_shadowConstantBuffer;
     ComPtr<ID3D12Resource> m_sceneConstantBuffer;
-    SceneConstantBuffer* mp_shadowConstantBufferWO;        // WRITE-ONLY pointer to the shadow pass constant buffer.
-    SceneConstantBuffer* mp_sceneConstantBufferWO;        // WRITE-ONLY pointer to the scene pass constant buffer.
+    SceneConstantBuffer* mp_shadowConstantBufferWO; // WRITE-ONLY pointer to the shadow pass constant buffer.
+    SceneConstantBuffer* mp_sceneConstantBufferWO;  // WRITE-ONLY pointer to the scene pass constant buffer.
     D3D12_GPU_DESCRIPTOR_HANDLE m_nullSrvHandle;    // Null SRV for out of bounds behavior.
     D3D12_GPU_DESCRIPTOR_HANDLE m_shadowDepthHandle;
     D3D12_GPU_DESCRIPTOR_HANDLE m_shadowCbvHandle;
     D3D12_GPU_DESCRIPTOR_HANDLE m_sceneCbvHandle;
 
+    // Resources for postprocess
+    ComPtr<ID3D12Resource> m_texSceneColor;
+    D3D12_GPU_DESCRIPTOR_HANDLE m_rtvSceneColorGpu;
+    D3D12_CPU_DESCRIPTOR_HANDLE m_rtvSceneColorCpu;
+    D3D12_GPU_DESCRIPTOR_HANDLE m_srvSceneColorGpu;
+    D3D12_CPU_DESCRIPTOR_HANDLE m_srvSceneColorCpu;
+    
 public:
-    FrameResource(ID3D12Device* pDevice, ID3D12PipelineState* pPso, ID3D12PipelineState* pShadowMapPso, ID3D12DescriptorHeap* pDsvHeap, ID3D12DescriptorHeap* pCbvSrvHeap, D3D12_VIEWPORT* pViewport, UINT frameResourceIndex);
+    FrameResource(ID3D12Device* pDevice, ID3D12PipelineState* pPso, ID3D12PipelineState* pShadowMapPso,
+        ID3D12DescriptorHeap* pDsvHeap, ID3D12DescriptorHeap* pCbvSrvHeap,
+        D3D12_VIEWPORT* pViewport, UINT frameResourceIndex);
+    
     ~FrameResource();
 
-    void Bind(ID3D12GraphicsCommandList* pCommandList, BOOL scenePass, D3D12_CPU_DESCRIPTOR_HANDLE* pRtvHandle, D3D12_CPU_DESCRIPTOR_HANDLE* pDsvHandle);
+    void Bind(ID3D12GraphicsCommandList* pCommandList, BOOL scenePass,
+        D3D12_CPU_DESCRIPTOR_HANDLE* pRtvHandle, D3D12_CPU_DESCRIPTOR_HANDLE* pDsvHandle);
     void Init();
     void SwapBarriers();
     void Finish();
-    void WriteConstantBuffers(D3D12_VIEWPORT* pViewport, Camera* pSceneCamera, Camera lightCams[NumLights], LightState lights[NumLights]);
+    void WriteConstantBuffers(D3D12_VIEWPORT* pViewport, Camera* pSceneCamera,
+        Camera lightCams[NumLights], LightState lights[NumLights]);
 };
