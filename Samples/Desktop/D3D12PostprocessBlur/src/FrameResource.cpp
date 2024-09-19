@@ -13,16 +13,22 @@
 #include "FrameResource.h"
 #include "SquidRoom.h"
 
-FrameResource::FrameResource(ID3D12Device* pDevice, ID3D12PipelineState* pPso, ID3D12PipelineState* pShadowMapPso, ID3D12DescriptorHeap* pDsvHeap, ID3D12DescriptorHeap* pCbvSrvHeap, D3D12_VIEWPORT* pViewport, UINT frameResourceIndex) :
+FrameResource::FrameResource(ID3D12Device* pDevice, ID3D12PipelineState* pPso, ID3D12PipelineState* pShadowMapPso,
+    ID3D12DescriptorHeap* pDsvHeap, ID3D12DescriptorHeap* pCbvSrvHeap,
+    D3D12_VIEWPORT* pViewport, UINT frameResourceIndex) :
     m_fenceValue(0),
     m_pipelineState(pPso),
     m_pipelineStateShadowMap(pShadowMapPso)
 {
     for (UINT i = 0; i < CommandListCount; i++)
     {
-        ThrowIfFailed(pDevice->CreateCommandAllocator(D3D12_COMMAND_LIST_TYPE_DIRECT, IID_PPV_ARGS(&m_commandAllocators[i])));
-        ThrowIfFailed(pDevice->CreateCommandList(0, D3D12_COMMAND_LIST_TYPE_DIRECT, m_commandAllocators[i].Get(), m_pipelineState.Get(), IID_PPV_ARGS(&m_commandLists[i])));
+        ThrowIfFailed(pDevice->CreateCommandAllocator(D3D12_COMMAND_LIST_TYPE_DIRECT,
+            IID_PPV_ARGS(&m_commandAllocators[i])));
+        ThrowIfFailed(pDevice->CreateCommandList(0, D3D12_COMMAND_LIST_TYPE_DIRECT,
+            m_commandAllocators[i].Get(), m_pipelineState.Get(),
+            IID_PPV_ARGS(&m_commandLists[i])));
 
+        NAME_D3D12_OBJECT_INDEXED(m_commandAllocators, i);
         NAME_D3D12_OBJECT_INDEXED(m_commandLists, i);
 
         // Close these command lists; don't record into them for now.
@@ -33,12 +39,20 @@ FrameResource::FrameResource(ID3D12Device* pDevice, ID3D12PipelineState* pPso, I
     {
         // Create command list allocators for worker threads. One alloc is 
         // for the shadow pass command list, and one is for the scene pass.
-        ThrowIfFailed(pDevice->CreateCommandAllocator(D3D12_COMMAND_LIST_TYPE_DIRECT, IID_PPV_ARGS(&m_shadowCommandAllocators[i])));
-        ThrowIfFailed(pDevice->CreateCommandAllocator(D3D12_COMMAND_LIST_TYPE_DIRECT, IID_PPV_ARGS(&m_sceneCommandAllocators[i])));
+        ThrowIfFailed(pDevice->CreateCommandAllocator(D3D12_COMMAND_LIST_TYPE_DIRECT,
+            IID_PPV_ARGS(&m_shadowCommandAllocators[i])));
+        ThrowIfFailed(pDevice->CreateCommandAllocator(D3D12_COMMAND_LIST_TYPE_DIRECT,
+            IID_PPV_ARGS(&m_sceneCommandAllocators[i])));
 
-        ThrowIfFailed(pDevice->CreateCommandList(0, D3D12_COMMAND_LIST_TYPE_DIRECT, m_shadowCommandAllocators[i].Get(), m_pipelineStateShadowMap.Get(), IID_PPV_ARGS(&m_shadowCommandLists[i])));
-        ThrowIfFailed(pDevice->CreateCommandList(0, D3D12_COMMAND_LIST_TYPE_DIRECT, m_sceneCommandAllocators[i].Get(), m_pipelineState.Get(), IID_PPV_ARGS(&m_sceneCommandLists[i])));
+        ThrowIfFailed(pDevice->CreateCommandList(0, D3D12_COMMAND_LIST_TYPE_DIRECT,
+            m_shadowCommandAllocators[i].Get(), m_pipelineStateShadowMap.Get(),
+            IID_PPV_ARGS(&m_shadowCommandLists[i])));
+        ThrowIfFailed(pDevice->CreateCommandList(0, D3D12_COMMAND_LIST_TYPE_DIRECT,
+            m_sceneCommandAllocators[i].Get(), m_pipelineState.Get(),
+            IID_PPV_ARGS(&m_sceneCommandLists[i])));
 
+        NAME_D3D12_OBJECT_INDEXED(m_shadowCommandAllocators, i);
+        NAME_D3D12_OBJECT_INDEXED(m_sceneCommandAllocators, i);
         NAME_D3D12_OBJECT_INDEXED(m_shadowCommandLists, i);
         NAME_D3D12_OBJECT_INDEXED(m_sceneCommandLists, i);
 
@@ -62,7 +76,7 @@ FrameResource::FrameResource(ID3D12Device* pDevice, ID3D12PipelineState* pPso, I
         D3D12_TEXTURE_LAYOUT_UNKNOWN,
         D3D12_RESOURCE_FLAG_ALLOW_DEPTH_STENCIL);
 
-    D3D12_CLEAR_VALUE clearValue;        // Performance tip: Tell the runtime at resource creation the desired clear value.
+    D3D12_CLEAR_VALUE clearValue; // Performance tip: Tell the runtime at resource creation the desired clear value.
     clearValue.Format = DXGI_FORMAT_D32_FLOAT;
     clearValue.DepthStencil.Depth = 1.0f;
     clearValue.DepthStencil.Stencil = 0;
@@ -80,7 +94,8 @@ FrameResource::FrameResource(ID3D12Device* pDevice, ID3D12PipelineState* pPso, I
     // Get a handle to the start of the descriptor heap then offset 
     // it based on the frame resource index.
     const UINT dsvDescriptorSize = pDevice->GetDescriptorHandleIncrementSize(D3D12_DESCRIPTOR_HEAP_TYPE_DSV);
-    CD3DX12_CPU_DESCRIPTOR_HANDLE depthHandle(pDsvHeap->GetCPUDescriptorHandleForHeapStart(), 1 + frameResourceIndex, dsvDescriptorSize); // + 1 for the shadow map.
+    CD3DX12_CPU_DESCRIPTOR_HANDLE depthHandle(pDsvHeap->GetCPUDescriptorHandleForHeapStart(),
+        1 + frameResourceIndex, dsvDescriptorSize); // + 1 for the shadow map.
 
     // Describe and create the shadow depth view and cache the CPU 
     // descriptor handle.
@@ -94,14 +109,16 @@ FrameResource::FrameResource(ID3D12Device* pDevice, ID3D12PipelineState* pPso, I
     // Get a handle to the start of the descriptor heap then offset it 
     // based on the existing textures and the frame resource index. Each 
     // frame has 1 SRV (shadow tex) and 2 CBVs.
-    const UINT nullSrvCount = 2;                                // Null descriptors at the start of the heap.
-    const UINT textureCount = _countof(SampleAssets::Textures);    // Diffuse + normal textures near the start of the heap.  Ideally, track descriptor heap contents/offsets at a higher level.
+    const UINT nullSrvCount = 2;   // Null descriptors at the start of the heap.
+    // Diffuse + normal textures near the start of the heap.
+    // Ideally, track descriptor heap contents/offsets at a higher level.
+    const UINT textureCount = _countof(SampleAssets::Textures);    
     const UINT cbvSrvDescriptorSize = pDevice->GetDescriptorHandleIncrementSize(D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV);
     CD3DX12_CPU_DESCRIPTOR_HANDLE cbvSrvCpuHandle(pCbvSrvHeap->GetCPUDescriptorHandleForHeapStart());
     CD3DX12_GPU_DESCRIPTOR_HANDLE cbvSrvGpuHandle(pCbvSrvHeap->GetGPUDescriptorHandleForHeapStart());
     m_nullSrvHandle = cbvSrvGpuHandle;
-    cbvSrvCpuHandle.Offset(nullSrvCount + textureCount + (frameResourceIndex * FrameCount), cbvSrvDescriptorSize);
-    cbvSrvGpuHandle.Offset(nullSrvCount + textureCount + (frameResourceIndex * FrameCount), cbvSrvDescriptorSize);
+    cbvSrvCpuHandle.Offset(nullSrvCount + textureCount + (frameResourceIndex * NUM_DESCRIPTORS), cbvSrvDescriptorSize);
+    cbvSrvGpuHandle.Offset(nullSrvCount + textureCount + (frameResourceIndex * NUM_DESCRIPTORS), cbvSrvDescriptorSize);
 
     // Describe and create a shader resource view (SRV) for the shadow depth 
     // texture and cache the GPU descriptor handle. This SRV is for sampling 
@@ -120,7 +137,10 @@ FrameResource::FrameResource(ID3D12Device* pDevice, ID3D12PipelineState* pPso, I
     cbvSrvGpuHandle.Offset(cbvSrvDescriptorSize);
 
     // Create the constant buffers.
-    const UINT constantBufferSize = (sizeof(SceneConstantBuffer) + (D3D12_CONSTANT_BUFFER_DATA_PLACEMENT_ALIGNMENT - 1)) & ~(D3D12_CONSTANT_BUFFER_DATA_PLACEMENT_ALIGNMENT - 1); // must be a multiple 256 bytes
+    const UINT constantBufferSize =
+        (sizeof(SceneConstantBuffer) + (D3D12_CONSTANT_BUFFER_DATA_PLACEMENT_ALIGNMENT - 1))
+        & ~(D3D12_CONSTANT_BUFFER_DATA_PLACEMENT_ALIGNMENT - 1); // must be a multiple 256 bytes
+    
     ThrowIfFailed(pDevice->CreateCommittedResource(
         &CD3DX12_HEAP_PROPERTIES(D3D12_HEAP_TYPE_UPLOAD),
         D3D12_HEAP_FLAG_NONE,
@@ -128,6 +148,7 @@ FrameResource::FrameResource(ID3D12Device* pDevice, ID3D12PipelineState* pPso, I
         D3D12_RESOURCE_STATE_GENERIC_READ,
         nullptr,
         IID_PPV_ARGS(&m_shadowConstantBuffer)));
+    
     ThrowIfFailed(pDevice->CreateCommittedResource(
         &CD3DX12_HEAP_PROPERTIES(D3D12_HEAP_TYPE_UPLOAD),
         D3D12_HEAP_FLAG_NONE,
@@ -137,9 +158,11 @@ FrameResource::FrameResource(ID3D12Device* pDevice, ID3D12PipelineState* pPso, I
         IID_PPV_ARGS(&m_sceneConstantBuffer)));
 
     // Map the constant buffers and cache their heap pointers.
-    CD3DX12_RANGE readRange(0, 0);        // We do not intend to read from this resource on the CPU.
-    ThrowIfFailed(m_shadowConstantBuffer->Map(0, &readRange, reinterpret_cast<void**>(&mp_shadowConstantBufferWO)));
-    ThrowIfFailed(m_sceneConstantBuffer->Map(0, &readRange, reinterpret_cast<void**>(&mp_sceneConstantBufferWO)));
+    CD3DX12_RANGE readRange(0, 0); // We do not intend to read from this resource on the CPU.
+    ThrowIfFailed(m_shadowConstantBuffer->Map(0, &readRange,
+        reinterpret_cast<void**>(&mp_shadowConstantBufferWO)));
+    ThrowIfFailed(m_sceneConstantBuffer->Map(0, &readRange,
+        reinterpret_cast<void**>(&mp_sceneConstantBufferWO)));
 
     // Create the constant buffer views: one for the shadow pass and
     // another for the scene pass.
@@ -162,13 +185,9 @@ FrameResource::FrameResource(ID3D12Device* pDevice, ID3D12PipelineState* pPso, I
     pDevice->CreateConstantBufferView(&cbvDesc, cbvSrvCpuHandle);
     m_sceneCbvHandle = cbvSrvGpuHandle;
 
-    // Batch up command lists for execution later.
-    const UINT batchSize = _countof(m_sceneCommandLists) + _countof(m_shadowCommandLists) + 3;
-    m_batchSubmit[0] = m_commandLists[CommandListPre].Get();
-    memcpy(m_batchSubmit + 1, m_shadowCommandLists, _countof(m_shadowCommandLists) * sizeof(ID3D12CommandList*));
-    m_batchSubmit[_countof(m_shadowCommandLists) + 1] = m_commandLists[CommandListMid].Get();
-    memcpy(m_batchSubmit + _countof(m_shadowCommandLists) + 2, m_sceneCommandLists, _countof(m_sceneCommandLists) * sizeof(ID3D12CommandList*));
-    m_batchSubmit[batchSize - 1] = m_commandLists[CommandListPost].Get();
+    // Increment the descriptor handles.
+    cbvSrvCpuHandle.Offset(cbvSrvDescriptorSize);
+    cbvSrvGpuHandle.Offset(cbvSrvDescriptorSize);
 
     // Resource initialization for postprocess.
     CD3DX12_RESOURCE_DESC descSceneColor = CD3DX12_RESOURCE_DESC::Tex2D(
@@ -191,6 +210,31 @@ FrameResource::FrameResource(ID3D12Device* pDevice, ID3D12PipelineState* pPso, I
         IID_PPV_ARGS(&m_texSceneColor)));
 
     NAME_D3D12_OBJECT(m_texSceneColor);
+
+    m_srvSceneColorCpu = cbvSrvCpuHandle;
+    m_srvSceneColorGpu = cbvSrvGpuHandle;
+
+    D3D12_SHADER_RESOURCE_VIEW_DESC srvSceneColorDesc = {};
+    srvSceneColorDesc.Format = DXGI_FORMAT_UNKNOWN;
+    srvSceneColorDesc.ViewDimension = D3D12_SRV_DIMENSION_TEXTURE2D;
+    srvSceneColorDesc.Shader4ComponentMapping = D3D12_DEFAULT_SHADER_4_COMPONENT_MAPPING;
+    srvSceneColorDesc.Texture2D.MipLevels = 1;
+
+    pDevice->CreateShaderResourceView(m_texSceneColor.Get(), &srvSceneColorDesc, m_srvSceneColorCpu);
+
+    // Batch up command lists for execution later.
+    const UINT batchSize = _countof(m_sceneCommandLists) + _countof(m_shadowCommandLists) + 3;
+    m_batchSubmit[0] = m_commandLists[CommandListPre].Get();
+    
+    memcpy(m_batchSubmit + 1, m_shadowCommandLists,
+        _countof(m_shadowCommandLists) * sizeof(ID3D12CommandList*));
+    
+    m_batchSubmit[_countof(m_shadowCommandLists) + 1] = m_commandLists[CommandListMid].Get();
+    
+    memcpy(m_batchSubmit + _countof(m_shadowCommandLists) + 2, m_sceneCommandLists,
+        _countof(m_sceneCommandLists) * sizeof(ID3D12CommandList*));
+    
+    m_batchSubmit[batchSize - 1] = m_commandLists[CommandListPost].Get();
 }
 
 FrameResource::~FrameResource()

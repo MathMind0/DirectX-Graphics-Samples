@@ -36,6 +36,15 @@ public:
     UINT64 m_fenceValue;
 
 private:
+    enum DESCRIPTORS
+    {
+        SHADOW_SRV,
+        SHADOW_CBV,
+        SCENE_CBV,
+        SCREEN_COLOR_SRV,
+        NUM_DESCRIPTORS
+    };
+    
     ComPtr<ID3D12PipelineState> m_pipelineState;
     ComPtr<ID3D12PipelineState> m_pipelineStateShadowMap;
     ComPtr<ID3D12Resource> m_shadowTexture;
@@ -55,6 +64,7 @@ private:
     D3D12_CPU_DESCRIPTOR_HANDLE m_rtvSceneColorCpu;
     D3D12_GPU_DESCRIPTOR_HANDLE m_srvSceneColorGpu;
     D3D12_CPU_DESCRIPTOR_HANDLE m_srvSceneColorCpu;
+    ComPtr<ID3D12Resource> m_cbSceneColor;
     
 public:
     FrameResource(ID3D12Device* pDevice, ID3D12PipelineState* pPso, ID3D12PipelineState* pShadowMapPso,
