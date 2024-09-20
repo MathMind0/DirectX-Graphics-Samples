@@ -19,23 +19,19 @@
 using namespace DirectX;
 using namespace Microsoft::WRL;
 
+struct ScreenInfo
+{
+    UINT size[4];
+};
+
 class FrameResource
 {
-public:
-    ID3D12CommandList* m_batchSubmit[NumContexts * 2 + CommandListCount];
-
-    ComPtr<ID3D12CommandAllocator> m_commandAllocators[CommandListCount];
-    ComPtr<ID3D12GraphicsCommandList> m_commandLists[CommandListCount];
-
-    ComPtr<ID3D12CommandAllocator> m_shadowCommandAllocators[NumContexts];
-    ComPtr<ID3D12GraphicsCommandList> m_shadowCommandLists[NumContexts];
-
-    ComPtr<ID3D12CommandAllocator> m_sceneCommandAllocators[NumContexts];
-    ComPtr<ID3D12GraphicsCommandList> m_sceneCommandLists[NumContexts];
-
-    UINT64 m_fenceValue;
-
 private:
+    ComPtr<ID3D12CommandAllocator> m_commandAllocator;
+    ComPtr<ID3D12CommandList> m_commandList;
+    
+    UINT64 m_fenceValue;
+    
     enum DESCRIPTORS
     {
         SHADOW_SRV,
@@ -64,11 +60,12 @@ private:
     D3D12_CPU_DESCRIPTOR_HANDLE m_rtvSceneColorCpu;
     D3D12_GPU_DESCRIPTOR_HANDLE m_srvSceneColorGpu;
     D3D12_CPU_DESCRIPTOR_HANDLE m_srvSceneColorCpu;
-    ComPtr<ID3D12Resource> m_cbSceneColor;
+    ComPtr<ID3D12Resource> m_cbScreenInfo;
+    ScreenInfo* m_pScreenInfo;
     
 public:
     FrameResource(ID3D12Device* pDevice, ID3D12PipelineState* pPso, ID3D12PipelineState* pShadowMapPso,
-        ID3D12DescriptorHeap* pDsvHeap, ID3D12DescriptorHeap* pCbvSrvHeap,
+        ID3D12DescriptorHeap* pRtvHeap, ID3D12DescriptorHeap* pDsvHeap, ID3D12DescriptorHeap* pCbvSrvHeap,
         D3D12_VIEWPORT* pViewport, UINT frameResourceIndex);
     
     ~FrameResource();

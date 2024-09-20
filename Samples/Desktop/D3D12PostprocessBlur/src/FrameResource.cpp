@@ -14,7 +14,7 @@
 #include "SquidRoom.h"
 
 FrameResource::FrameResource(ID3D12Device* pDevice, ID3D12PipelineState* pPso, ID3D12PipelineState* pShadowMapPso,
-    ID3D12DescriptorHeap* pDsvHeap, ID3D12DescriptorHeap* pCbvSrvHeap,
+    ID3D12DescriptorHeap* pRtvHeap, ID3D12DescriptorHeap* pDsvHeap, ID3D12DescriptorHeap* pCbvSrvHeap,
     D3D12_VIEWPORT* pViewport, UINT frameResourceIndex) :
     m_fenceValue(0),
     m_pipelineState(pPso),
@@ -222,6 +222,32 @@ FrameResource::FrameResource(ID3D12Device* pDevice, ID3D12PipelineState* pPso, I
 
     pDevice->CreateShaderResourceView(m_texSceneColor.Get(), &srvSceneColorDesc, m_srvSceneColorCpu);
 
+    const UINT rtvDescriptorSize = pDevice->GetDescriptorHandleIncrementSize(D3D12_DESCRIPTOR_HEAP_TYPE_RTV);
+    m_rtvSceneColorCpu = CD3DX12_CPU_DESCRIPTOR_HANDLE(pRtvHeap->GetCPUDescriptorHandleForHeapStart(),
+        FrameCount + frameResourceIndex, rtvDescriptorSize);
+    m_rtvSceneColorGpu = CD3DX12_GPU_DESCRIPTOR_HANDLE(pRtvHeap->GetGPUDescriptorHandleForHeapStart(),
+        FrameCount + frameResourceIndex, rtvDescriptorSize);
+
+    D3D12_RENDER_TARGET_VIEW_DESC rtvDesc = {};
+    rtvDesc.Format = DXGI_FORMAT_UNKNOWN;
+    rtvDesc.ViewDimension = D3D12_RTV_DIMENSION_TEXTURE2D;
+    rtvDesc.Texture2D.MipSlice = 0;
+    pDevice->CreateRenderTargetView(m_texSceneColor.Get(), &rtvDesc, m_rtvSceneColorCpu);
+    
+    const UINT szScreenInfoCB = (sizeof(ScreenInfo) + D3D12_CONSTANT_BUFFER_DATA_PLACEMENT_ALIGNMENT - 1) &
+        ~(D3D12_CONSTANT_BUFFER_DATA_PLACEMENT_ALIGNMENT - 1);
+
+    ThrowIfFailed(pDevice->CreateCommittedResource(
+        &CD3DX12_HEAP_PROPERTIES(D3D12_HEAP_TYPE_UPLOAD),
+        D3D12_HEAP_FLAG_NONE,
+        CD3DX12_RESOURCE_DESC::Buffer(szScreenInfoCB),
+        D3D12_RESOURCE_STATE_GENERIC_READ,
+        nullptr,
+        IID_PPV_ARGS(m_cbScreenInfo)));
+
+    ThrowIfFailed(m_cbScreenInfo->Map(0, &readRange,
+        reinterpret_cast<void**>(&m_pScreenInfo)));
+    
     // Batch up command lists for execution later.
     const UINT batchSize = _countof(m_sceneCommandLists) + _countof(m_shadowCommandLists) + 3;
     m_batchSubmit[0] = m_commandLists[CommandListPre].Get();
@@ -258,11 +284,14 @@ FrameResource::~FrameResource()
     }
 
     m_shadowTexture = nullptr;
+
+    m_texSceneColor = nullptr;
 }
 
 // Builds and writes constant buffers from scratch to the proper slots for 
 // this frame resource.
-void FrameResource::WriteConstantBuffers(D3D12_VIEWPORT* pViewport, Camera* pSceneCamera, Camera lightCams[NumLights], LightState lights[NumLights])
+void FrameResource::WriteConstantBuffers(D3D12_VIEWPORT* pViewport, Camera* pSceneCamera,
+    Camera lightCams[NumLights], LightState lights[NumLights])
 {
     SceneConstantBuffer sceneConsts = {}; 
     SceneConstantBuffer shadowConsts = {};
@@ -272,10 +301,14 @@ void FrameResource::WriteConstantBuffers(D3D12_VIEWPORT* pViewport, Camera* pSce
     ::XMStoreFloat4x4(&shadowConsts.model, XMMatrixScaling(0.1f, 0.1f, 0.1f));
 
     // The scene pass is drawn from the camera.
-    pSceneCamera->Get3DViewProjMatrices(&sceneConsts.view, &sceneConsts.projection, 90.0f, pViewport->Width, pViewport->Height);
+    pSceneCamera->Get3DViewProjMatrices(&sceneConsts.view,
+        &sceneConsts.projection, 90.0f,
+        pViewport->Width, pViewport->Height);
 
     // The light pass is drawn from the first light.
-    lightCams[0].Get3DViewProjMatrices(&shadowConsts.view, &shadowConsts.projection, 90.0f, pViewport->Width, pViewport->Height);
+    lightCams[0].Get3DViewProjMatrices(&shadowConsts.view,
+        &shadowConsts.projection, 90.0f,
+        pViewport->Width, pViewport->Height);
 
     for (int i = 0; i < NumLights; i++)
     {
@@ -305,23 +338,28 @@ void FrameResource::Init()
     }
 
     // Clear the depth stencil buffer in preparation for rendering the shadow map.
-    m_commandLists[CommandListPre]->ClearDepthStencilView(m_shadowDepthView, D3D12_CLEAR_FLAG_DEPTH, 1.0f, 0, 0, nullptr);
+    m_commandLists[CommandListPre]->ClearDepthStencilView(m_shadowDepthView, D3D12_CLEAR_FLAG_DEPTH,
+        1.0f, 0, 0, nullptr);
 
     // Reset the worker command allocators and lists.
     for (int i = 0; i < NumContexts; i++)
     {
         ThrowIfFailed(m_shadowCommandAllocators[i]->Reset());
-        ThrowIfFailed(m_shadowCommandLists[i]->Reset(m_shadowCommandAllocators[i].Get(), m_pipelineStateShadowMap.Get()));
+        ThrowIfFailed(m_shadowCommandLists[i]->Reset(m_shadowCommandAllocators[i].Get(),
+            m_pipelineStateShadowMap.Get()));
 
         ThrowIfFailed(m_sceneCommandAllocators[i]->Reset());
-        ThrowIfFailed(m_sceneCommandLists[i]->Reset(m_sceneCommandAllocators[i].Get(), m_pipelineState.Get()));
+        ThrowIfFailed(m_sceneCommandLists[i]->Reset(m_sceneCommandAllocators[i].Get(),
+            m_pipelineState.Get()));
     }
 }
 
 void FrameResource::SwapBarriers()
 {
     // Transition the shadow map from writeable to readable.
-    m_commandLists[CommandListMid]->ResourceBarrier(1, &CD3DX12_RESOURCE_BARRIER::Transition(m_shadowTexture.Get(), D3D12_RESOURCE_STATE_DEPTH_WRITE, D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE));
+    m_commandLists[CommandListMid]->ResourceBarrier(1,
+        &CD3DX12_RESOURCE_BARRIER::Transition(m_shadowTexture.Get(),
+            D3D12_RESOURCE_STATE_DEPTH_WRITE, D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE));
 }
 
 void FrameResource::Finish()
