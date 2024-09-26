@@ -15,6 +15,7 @@
 #include "Camera.h"
 #include "StepTimer.h"
 #include "SquidRoom.h"
+#include "FrameResource.h"
 
 using namespace DirectX;
 
@@ -24,30 +25,6 @@ using namespace DirectX;
 // referenced by the GPU.
 // An example of this can be found in the class method: OnDestroy().
 using Microsoft::WRL::ComPtr;
-
-class FrameResource;
-
-struct LightState
-{
-    XMFLOAT4 position;
-    XMFLOAT4 direction;
-    XMFLOAT4 color;
-    XMFLOAT4 falloff;
-
-    XMFLOAT4X4 view;
-    XMFLOAT4X4 projection;
-};
-
-struct SceneConstantBuffer
-{
-    XMFLOAT4X4 model;
-    XMFLOAT4X4 view;
-    XMFLOAT4X4 projection;
-    XMFLOAT4 ambientColor;
-    BOOL sampleShadowMap;
-    BOOL padding[3];        // Must be aligned to be made up of N float4s.
-    LightState lights[NumLights];
-};
 
 class D3D12PostprocessBlur : public DXSample
 {
@@ -74,24 +51,38 @@ private:
         bool animate;
     };
 
-    // Pipeline objects.
+    // Rendering Context
     CD3DX12_VIEWPORT m_viewport;
     CD3DX12_RECT m_scissorRect;
     ComPtr<IDXGISwapChain3> m_swapChain;
     ComPtr<ID3D12Device> m_device;
-    ComPtr<ID3D12Resource> m_renderTargets[FrameCount];
-    ComPtr<ID3D12Resource> m_depthStencil;
-    ComPtr<ID3D12CommandAllocator> m_commandAllocator;
+    ComPtr<ID3D12Resource> m_backBuffers[FrameCount];
+    ComPtr<ID3D12Resource> m_depthStencil;    
     ComPtr<ID3D12CommandQueue> m_commandQueue;
-    ComPtr<ID3D12RootSignature> m_rootSignature;
+    ComPtr<ID3D12CommandAllocator> m_commandAllocator;
+    ComPtr<ID3D12GraphicsCommandList> m_commandList;
+    D3D12_FEATURE_DATA_ROOT_SIGNATURE m_featureData;
+    UINT m_compileFlags;
+
+    // Descriptor Heaps
     ComPtr<ID3D12DescriptorHeap> m_rtvHeap;
     ComPtr<ID3D12DescriptorHeap> m_dsvHeap;
     ComPtr<ID3D12DescriptorHeap> m_cbvSrvHeap;
     ComPtr<ID3D12DescriptorHeap> m_samplerHeap;
-    ComPtr<ID3D12PipelineState> m_pipelineState;
-    ComPtr<ID3D12PipelineState> m_pipelineStateShadowMap;
+    UINT m_rtvDescriptorSize;
+    UINT m_dsvDescriptorSize;
+    UINT m_defaultDescriptorSize;
 
-    // App resources.
+    // Shadow Resources
+    ComPtr<ID3D12Resource> m_shadowTexture;
+    D3D12_CPU_DESCRIPTOR_HANDLE m_shadowDepthView;
+    D3D12_GPU_DESCRIPTOR_HANDLE m_shadowDepthHandle;
+    ComPtr<ID3D12PipelineState> m_psoRenderShadow;
+    D3D12_GPU_DESCRIPTOR_HANDLE m_srvNullGPU;
+    
+    // Scene Resources
+    ComPtr<ID3D12RootSignature> m_sigRenderScene;
+    ComPtr<ID3D12PipelineState> m_psoRenderScene;
     D3D12_VERTEX_BUFFER_VIEW m_vertexBufferView;
     D3D12_INDEX_BUFFER_VIEW m_indexBufferView;
     ComPtr<ID3D12Resource> m_textures[_countof(SampleAssets::Textures)];
@@ -99,8 +90,17 @@ private:
     ComPtr<ID3D12Resource> m_indexBuffer;
     ComPtr<ID3D12Resource> m_indexBufferUpload;
     ComPtr<ID3D12Resource> m_vertexBuffer;
-    ComPtr<ID3D12Resource> m_vertexBufferUpload;
-    UINT m_rtvDescriptorSize;
+    ComPtr<ID3D12Resource> m_vertexBufferUpload;    
+    D3D12_GPU_DESCRIPTOR_HANDLE m_srvFirstTextureGPU;
+
+    // Postprocess Resources
+    ComPtr<ID3D12Resource> m_texSceneColor;
+    D3D12_GPU_DESCRIPTOR_HANDLE m_rtvSceneColorGpu;
+    D3D12_CPU_DESCRIPTOR_HANDLE m_rtvSceneColorCpu;
+    D3D12_GPU_DESCRIPTOR_HANDLE m_srvSceneColorGpu;
+    D3D12_CPU_DESCRIPTOR_HANDLE m_srvSceneColorCpu;
+
+    // App data
     InputState m_keyboardInput;
     LightState m_lights[NumLights];
     Camera m_lightCameras[NumLights];
@@ -111,13 +111,9 @@ private:
     double m_cpuTime;
 
     // Synchronization objects.
-    HANDLE m_workerBeginRenderFrame[NumContexts];
-    HANDLE m_workerFinishShadowPass[NumContexts];
-    HANDLE m_workerFinishedRenderFrame[NumContexts];
-    HANDLE m_threadHandles[NumContexts];
     UINT m_frameIndex;
-    HANDLE m_fenceEvent;
     ComPtr<ID3D12Fence> m_fence;
+    HANDLE m_fenceEvent;    
     UINT64 m_fenceValue;
 
     // Singleton object so that worker threads can share members.
@@ -128,21 +124,22 @@ private:
     FrameResource* m_pCurrentFrameResource;
     int m_currentFrameResourceIndex;
 
-    struct ThreadParameter
-    {
-        int threadIndex;
-    };
-    ThreadParameter m_threadParameters[NumContexts];
-
-    void WorkerThread(int threadIndex);
     void SetCommonPipelineState(ID3D12GraphicsCommandList* pCommandList);
 
-    void LoadPipeline();
-    void LoadAssets();
+    void CreateRenderContext();
+    void CreateSceneResources();
+    void CreateDescriptorHeaps();
+    void CreateBackBuffers();
+    void CreateSceneSignatures();
+    void CreateScenePSOs();
+    void CreateAssets();
+    void CreateShadowResources();
+    void CreatePostprocessResources();
+    void CreateFrameResources();
+    
     void RestoreD3DResources();
     void ReleaseD3DResources();
     void WaitForGpu();
-    void LoadContexts();
     void BeginFrame();
     void MidFrame();
     void EndFrame();

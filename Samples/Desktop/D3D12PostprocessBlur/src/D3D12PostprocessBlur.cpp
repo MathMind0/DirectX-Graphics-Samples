@@ -42,13 +42,12 @@ D3D12PostprocessBlur::~D3D12PostprocessBlur()
 
 void D3D12PostprocessBlur::OnInit()
 {
-    LoadPipeline();
-    LoadAssets();
-    LoadContexts();
+    CreateRenderContext();
+    CreateSceneResources();
 }
 
 // Load the rendering pipeline dependencies.
-void D3D12PostprocessBlur::LoadPipeline()
+void D3D12PostprocessBlur::CreateRenderContext()
 {
     UINT dxgiFactoryFlags = 0;
 
@@ -126,180 +125,195 @@ void D3D12PostprocessBlur::LoadPipeline()
 
     ThrowIfFailed(swapChain.As(&m_swapChain));
     m_frameIndex = m_swapChain->GetCurrentBackBufferIndex();
+    
+    ThrowIfFailed(m_device->CreateCommandAllocator(D3D12_COMMAND_LIST_TYPE_DIRECT,
+        IID_PPV_ARGS(&m_commandAllocator)));
+    ThrowIfFailed(m_device->CreateCommandList(0, D3D12_COMMAND_LIST_TYPE_DIRECT,
+        m_commandAllocator.Get(), nullptr, IID_PPV_ARGS(&m_commandList)));
 
-    // Create descriptor heaps.
+    // This is the highest version the sample supports.
+    // If CheckFeatureSupport succeeds, the HighestVersion returned will not be greater than this.
+    m_featureData.HighestVersion = D3D_ROOT_SIGNATURE_VERSION_1_1;
+
+    if (FAILED(m_device->CheckFeatureSupport(D3D12_FEATURE_ROOT_SIGNATURE,
+        &m_featureData, sizeof(m_featureData))))
     {
-        // Describe and create a render target view (RTV) descriptor heap.
-        D3D12_DESCRIPTOR_HEAP_DESC rtvHeapDesc = {};
-        rtvHeapDesc.NumDescriptors = FrameCount;
-        rtvHeapDesc.Type = D3D12_DESCRIPTOR_HEAP_TYPE_RTV;
-        rtvHeapDesc.Flags = D3D12_DESCRIPTOR_HEAP_FLAG_NONE;
-        ThrowIfFailed(m_device->CreateDescriptorHeap(&rtvHeapDesc, IID_PPV_ARGS(&m_rtvHeap)));
-
-        // Describe and create a depth stencil view (DSV) descriptor heap.
-        // Each frame has its own depth stencils (to write shadows onto) 
-        // and then there is one for the scene itself.
-        D3D12_DESCRIPTOR_HEAP_DESC dsvHeapDesc = {};
-        dsvHeapDesc.NumDescriptors = 1 + FrameCount * 1;
-        dsvHeapDesc.Type = D3D12_DESCRIPTOR_HEAP_TYPE_DSV;
-        dsvHeapDesc.Flags = D3D12_DESCRIPTOR_HEAP_FLAG_NONE;
-        ThrowIfFailed(m_device->CreateDescriptorHeap(&dsvHeapDesc, IID_PPV_ARGS(&m_dsvHeap)));
-
-        // Describe and create a shader resource view (SRV) and constant 
-        // buffer view (CBV) descriptor heap.  Heap layout: null views, 
-        // object diffuse + normal textures views, frame 1's shadow buffer, 
-        // frame 1's 2x constant buffer, frame 2's shadow buffer, frame 2's 
-        // 2x constant buffers, etc...
-        const UINT nullSrvCount = 2;        // Null descriptors are needed for out of bounds behavior reads.
-        const UINT cbvCount = FrameCount * 2;
-        const UINT srvCount = _countof(SampleAssets::Textures) + (FrameCount * 1);
-        D3D12_DESCRIPTOR_HEAP_DESC cbvSrvHeapDesc = {};
-        cbvSrvHeapDesc.NumDescriptors = nullSrvCount + cbvCount + srvCount;
-        cbvSrvHeapDesc.Type = D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV;
-        cbvSrvHeapDesc.Flags = D3D12_DESCRIPTOR_HEAP_FLAG_SHADER_VISIBLE;
-        ThrowIfFailed(m_device->CreateDescriptorHeap(&cbvSrvHeapDesc, IID_PPV_ARGS(&m_cbvSrvHeap)));
-        NAME_D3D12_OBJECT(m_cbvSrvHeap);
-
-        // Describe and create a sampler descriptor heap.
-        D3D12_DESCRIPTOR_HEAP_DESC samplerHeapDesc = {};
-        samplerHeapDesc.NumDescriptors = 2;        // One clamp and one wrap sampler.
-        samplerHeapDesc.Type = D3D12_DESCRIPTOR_HEAP_TYPE_SAMPLER;
-        samplerHeapDesc.Flags = D3D12_DESCRIPTOR_HEAP_FLAG_SHADER_VISIBLE;
-        ThrowIfFailed(m_device->CreateDescriptorHeap(&samplerHeapDesc, IID_PPV_ARGS(&m_samplerHeap)));
-        NAME_D3D12_OBJECT(m_samplerHeap);
-
-        m_rtvDescriptorSize = m_device->GetDescriptorHandleIncrementSize(D3D12_DESCRIPTOR_HEAP_TYPE_RTV);
+        m_featureData.HighestVersion = D3D_ROOT_SIGNATURE_VERSION_1_0;
     }
-
-    ThrowIfFailed(m_device->CreateCommandAllocator(D3D12_COMMAND_LIST_TYPE_DIRECT, IID_PPV_ARGS(&m_commandAllocator)));
-}
-
-// Load the sample assets.
-void D3D12PostprocessBlur::LoadAssets()
-{
-    // Create the root signature.
-    {
-        D3D12_FEATURE_DATA_ROOT_SIGNATURE featureData = {};
-
-        // This is the highest version the sample supports.
-        // If CheckFeatureSupport succeeds, the HighestVersion returned will not be greater than this.
-        featureData.HighestVersion = D3D_ROOT_SIGNATURE_VERSION_1_1;
-
-        if (FAILED(m_device->CheckFeatureSupport(D3D12_FEATURE_ROOT_SIGNATURE,
-            &featureData, sizeof(featureData))))
-        {
-            featureData.HighestVersion = D3D_ROOT_SIGNATURE_VERSION_1_0;
-        }
-
-        CD3DX12_DESCRIPTOR_RANGE1 ranges[4]; // Perfomance TIP: Order from most frequent to least frequent.
-        // 2 frequently changed diffuse + normal textures - using registers t1 and t2.
-        ranges[0].Init(D3D12_DESCRIPTOR_RANGE_TYPE_SRV, 2, 1, 0,
-            D3D12_DESCRIPTOR_RANGE_FLAG_DATA_STATIC);
-        // 1 frequently changed constant buffer.
-        ranges[1].Init(D3D12_DESCRIPTOR_RANGE_TYPE_CBV, 1, 0, 0,
-            D3D12_DESCRIPTOR_RANGE_FLAG_DATA_STATIC);
-        // 1 infrequently changed shadow texture - starting in register t0.
-        ranges[2].Init(D3D12_DESCRIPTOR_RANGE_TYPE_SRV, 1, 0);
-        // 2 static samplers.
-        ranges[3].Init(D3D12_DESCRIPTOR_RANGE_TYPE_SAMPLER, 2, 0);                                            
-
-        CD3DX12_ROOT_PARAMETER1 rootParameters[4];
-        rootParameters[0].InitAsDescriptorTable(1, &ranges[0], D3D12_SHADER_VISIBILITY_PIXEL);
-        rootParameters[1].InitAsDescriptorTable(1, &ranges[1], D3D12_SHADER_VISIBILITY_ALL);
-        rootParameters[2].InitAsDescriptorTable(1, &ranges[2], D3D12_SHADER_VISIBILITY_PIXEL);
-        rootParameters[3].InitAsDescriptorTable(1, &ranges[3], D3D12_SHADER_VISIBILITY_PIXEL);
-
-        CD3DX12_VERSIONED_ROOT_SIGNATURE_DESC rootSignatureDesc;
-        rootSignatureDesc.Init_1_1(_countof(rootParameters), rootParameters,
-            0, nullptr,
-            D3D12_ROOT_SIGNATURE_FLAG_ALLOW_INPUT_ASSEMBLER_INPUT_LAYOUT);
-
-        ComPtr<ID3DBlob> signature;
-        ComPtr<ID3DBlob> error;
-        ThrowIfFailed(D3DX12SerializeVersionedRootSignature(&rootSignatureDesc, featureData.HighestVersion,
-            &signature, &error));
-        ThrowIfFailed(m_device->CreateRootSignature(0,
-            signature->GetBufferPointer(), signature->GetBufferSize(),
-            IID_PPV_ARGS(&m_rootSignature)));
-        NAME_D3D12_OBJECT(m_rootSignature);
-    }
-
-    // Create the pipeline state, which includes loading shaders.
-    {
-        ComPtr<ID3DBlob> vertexShader;
-        ComPtr<ID3DBlob> pixelShader;
 
 #if defined(_DEBUG)
-        // Enable better shader debugging with the graphics debugging tools.
-        UINT compileFlags = D3DCOMPILE_DEBUG | D3DCOMPILE_SKIP_OPTIMIZATION;
+    // Enable better shader debugging with the graphics debugging tools.
+    m_compileFlags = D3DCOMPILE_DEBUG | D3DCOMPILE_SKIP_OPTIMIZATION;
 #else
-        UINT compileFlags = D3DCOMPILE_OPTIMIZATION_LEVEL3;
+    m_compileFlags = D3DCOMPILE_OPTIMIZATION_LEVEL3;
 #endif
+}
 
-        ThrowIfFailed(D3DCompileFromFile(GetAssetFullPath(L"shaders.hlsl").c_str(), nullptr, nullptr,
-            "VSMain", "vs_5_0", compileFlags, 0, &vertexShader, nullptr));
-        ThrowIfFailed(D3DCompileFromFile(GetAssetFullPath(L"shaders.hlsl").c_str(), nullptr, nullptr,
-            "PSMain", "ps_5_0", compileFlags, 0, &pixelShader, nullptr));
+void D3D12PostprocessBlur::CreateDescriptorHeaps()
+{
+    // Describe and create a render target view (RTV) descriptor heap.
+    D3D12_DESCRIPTOR_HEAP_DESC rtvHeapDesc = {};
+    rtvHeapDesc.NumDescriptors = FrameCount * 2; // One back buffer and one screen color buffer for each frame.
+    rtvHeapDesc.Type = D3D12_DESCRIPTOR_HEAP_TYPE_RTV;
+    rtvHeapDesc.Flags = D3D12_DESCRIPTOR_HEAP_FLAG_NONE;
+    ThrowIfFailed(m_device->CreateDescriptorHeap(&rtvHeapDesc, IID_PPV_ARGS(&m_rtvHeap)));
 
-        D3D12_INPUT_LAYOUT_DESC inputLayoutDesc;
-        inputLayoutDesc.pInputElementDescs = SampleAssets::StandardVertexDescription;
-        inputLayoutDesc.NumElements = _countof(SampleAssets::StandardVertexDescription);
+    // Describe and create a depth stencil view (DSV) descriptor heap.
+    // Each frame has its own depth stencils (to write shadows onto) 
+    // and then there is one for the scene itself.
+    D3D12_DESCRIPTOR_HEAP_DESC dsvHeapDesc = {};
+    dsvHeapDesc.NumDescriptors = 1 + FrameCount * 1; // One shadow buffer for each frame and single depth buffer.
+    dsvHeapDesc.Type = D3D12_DESCRIPTOR_HEAP_TYPE_DSV;
+    dsvHeapDesc.Flags = D3D12_DESCRIPTOR_HEAP_FLAG_NONE;
+    ThrowIfFailed(m_device->CreateDescriptorHeap(&dsvHeapDesc, IID_PPV_ARGS(&m_dsvHeap)));
 
-        CD3DX12_DEPTH_STENCIL_DESC depthStencilDesc(D3D12_DEFAULT);
-        depthStencilDesc.DepthEnable = true;
-        depthStencilDesc.DepthWriteMask = D3D12_DEPTH_WRITE_MASK_ALL;
-        depthStencilDesc.DepthFunc = D3D12_COMPARISON_FUNC_LESS_EQUAL;
-        depthStencilDesc.StencilEnable = FALSE;
+    // Describe and create a shader resource view (SRV) and constant 
+    // buffer view (CBV) descriptor heap.  Heap layout: null views, 
+    // object diffuse + normal textures views, frame 1's shadow buffer, 
+    // frame 1's 2x constant buffer, frame 2's shadow buffer, frame 2's 
+    // 2x constant buffers, etc...
+    const UINT nullSrvCount = 2;        // Null descriptors are needed for out of bounds behavior reads.
+    const UINT cbvCount = FrameCount * 2; // The scene cbuffers of both shadow pass and scene pass for each frame.
+    // The shadow SRV and the scene color SRV for each frame.
+    const UINT srvCount = _countof(SampleAssets::Textures) + (FrameCount * 2); 
+    D3D12_DESCRIPTOR_HEAP_DESC cbvSrvHeapDesc = {};
+    cbvSrvHeapDesc.NumDescriptors = nullSrvCount + cbvCount + srvCount;
+    cbvSrvHeapDesc.Type = D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV;
+    cbvSrvHeapDesc.Flags = D3D12_DESCRIPTOR_HEAP_FLAG_SHADER_VISIBLE;
+    ThrowIfFailed(m_device->CreateDescriptorHeap(&cbvSrvHeapDesc, IID_PPV_ARGS(&m_cbvSrvHeap)));
+    NAME_D3D12_OBJECT(m_cbvSrvHeap);
 
-        // Describe and create the PSO for rendering the scene.
-        D3D12_GRAPHICS_PIPELINE_STATE_DESC psoDesc = {};
-        psoDesc.InputLayout = inputLayoutDesc;
-        psoDesc.pRootSignature = m_rootSignature.Get();
-        psoDesc.VS = CD3DX12_SHADER_BYTECODE(vertexShader.Get());
-        psoDesc.PS = CD3DX12_SHADER_BYTECODE(pixelShader.Get());
-        psoDesc.RasterizerState = CD3DX12_RASTERIZER_DESC(D3D12_DEFAULT);
-        psoDesc.BlendState = CD3DX12_BLEND_DESC(D3D12_DEFAULT);
-        psoDesc.DepthStencilState = depthStencilDesc;
-        psoDesc.SampleMask = UINT_MAX;
-        psoDesc.PrimitiveTopologyType = D3D12_PRIMITIVE_TOPOLOGY_TYPE_TRIANGLE;
-        psoDesc.NumRenderTargets = 1;
-        psoDesc.RTVFormats[0] = DXGI_FORMAT_R8G8B8A8_UNORM;
-        psoDesc.DSVFormat = DXGI_FORMAT_D32_FLOAT;
-        psoDesc.SampleDesc.Count = 1;
+    // Describe and create a sampler descriptor heap.
+    D3D12_DESCRIPTOR_HEAP_DESC samplerHeapDesc = {};
+    samplerHeapDesc.NumDescriptors = 2;        // One clamp and one wrap sampler.
+    samplerHeapDesc.Type = D3D12_DESCRIPTOR_HEAP_TYPE_SAMPLER;
+    samplerHeapDesc.Flags = D3D12_DESCRIPTOR_HEAP_FLAG_SHADER_VISIBLE;
+    ThrowIfFailed(m_device->CreateDescriptorHeap(&samplerHeapDesc, IID_PPV_ARGS(&m_samplerHeap)));
+    NAME_D3D12_OBJECT(m_samplerHeap);
 
-        ThrowIfFailed(m_device->CreateGraphicsPipelineState(&psoDesc, IID_PPV_ARGS(&m_pipelineState)));
-        NAME_D3D12_OBJECT(m_pipelineState);
+    m_rtvDescriptorSize = m_device->GetDescriptorHandleIncrementSize(D3D12_DESCRIPTOR_HEAP_TYPE_RTV);
+    m_dsvDescriptorSize = m_device->GetDescriptorHandleIncrementSize(D3D12_DESCRIPTOR_HEAP_TYPE_DSV);
+    m_defaultDescriptorSize = m_device->GetDescriptorHandleIncrementSize(D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV);
+}
 
-        // Alter the description and create the PSO for rendering
-        // the shadow map.  The shadow map does not use a pixel
-        // shader or render targets.
-        psoDesc.PS = CD3DX12_SHADER_BYTECODE(0, 0);
-        psoDesc.RTVFormats[0] = DXGI_FORMAT_UNKNOWN;
-        psoDesc.NumRenderTargets = 0;
-
-        ThrowIfFailed(m_device->CreateGraphicsPipelineState(&psoDesc, IID_PPV_ARGS(&m_pipelineStateShadowMap)));
-        NAME_D3D12_OBJECT(m_pipelineStateShadowMap);
-    }
-
-    // Create temporary command list for initial GPU setup.
-    ComPtr<ID3D12GraphicsCommandList> commandList;
-    ThrowIfFailed(m_device->CreateCommandList(0, D3D12_COMMAND_LIST_TYPE_DIRECT,
-        m_commandAllocator.Get(), m_pipelineState.Get(), IID_PPV_ARGS(&commandList)));
-
+void D3D12PostprocessBlur::CreateBackBuffers()
+{
     // Create render target views (RTVs).
     CD3DX12_CPU_DESCRIPTOR_HANDLE rtvHandle(m_rtvHeap->GetCPUDescriptorHandleForHeapStart());
+    D3D12_CPU_DESCRIPTOR_HANDLE rtvBackBuffer[FrameCount];
+    
     for (UINT i = 0; i < FrameCount; i++)
     {
-        ThrowIfFailed(m_swapChain->GetBuffer(i, IID_PPV_ARGS(&m_renderTargets[i])));
-        m_device->CreateRenderTargetView(m_renderTargets[i].Get(), nullptr, rtvHandle);
+        rtvBackBuffer[i] = rtvHandle;
+        ThrowIfFailed(m_swapChain->GetBuffer(i, IID_PPV_ARGS(&m_backBuffers[i])));
+        m_device->CreateRenderTargetView(m_backBuffers[i].Get(), nullptr, rtvHandle);
         rtvHandle.Offset(1, m_rtvDescriptorSize);
 
-        NAME_D3D12_OBJECT_INDEXED(m_renderTargets, i);
+        NAME_D3D12_OBJECT_INDEXED(m_backBuffers, i);
     }
+}
+
+
+void D3D12PostprocessBlur::CreateSceneSignatures()
+{
+    CD3DX12_DESCRIPTOR_RANGE1 ranges[4]; // Perfomance TIP: Order from most frequent to least frequent.
+    // 2 frequently changed diffuse + normal textures - using registers t1 and t2.
+    ranges[0].Init(D3D12_DESCRIPTOR_RANGE_TYPE_SRV, 2, 1, 0,
+        D3D12_DESCRIPTOR_RANGE_FLAG_DATA_STATIC);
+    // 1 frequently changed constant buffer.
+    ranges[1].Init(D3D12_DESCRIPTOR_RANGE_TYPE_CBV, 1, 0, 0,
+        D3D12_DESCRIPTOR_RANGE_FLAG_DATA_STATIC);
+    // 1 infrequently changed shadow texture - starting in register t0.
+    ranges[2].Init(D3D12_DESCRIPTOR_RANGE_TYPE_SRV, 1, 0);
+    // 2 static samplers.
+    ranges[3].Init(D3D12_DESCRIPTOR_RANGE_TYPE_SAMPLER, 2, 0);                                            
+
+    CD3DX12_ROOT_PARAMETER1 rootParameters[4];
+    rootParameters[0].InitAsDescriptorTable(1, &ranges[0], D3D12_SHADER_VISIBILITY_PIXEL);
+    rootParameters[1].InitAsDescriptorTable(1, &ranges[1], D3D12_SHADER_VISIBILITY_ALL);
+    rootParameters[2].InitAsDescriptorTable(1, &ranges[2], D3D12_SHADER_VISIBILITY_PIXEL);
+    rootParameters[3].InitAsDescriptorTable(1, &ranges[3], D3D12_SHADER_VISIBILITY_PIXEL);
+
+    CD3DX12_VERSIONED_ROOT_SIGNATURE_DESC rootSignatureDesc;
+    rootSignatureDesc.Init_1_1(_countof(rootParameters), rootParameters,
+        0, nullptr,
+        D3D12_ROOT_SIGNATURE_FLAG_ALLOW_INPUT_ASSEMBLER_INPUT_LAYOUT);
+
+    ComPtr<ID3DBlob> signature;
+    ComPtr<ID3DBlob> error;
+    ThrowIfFailed(D3DX12SerializeVersionedRootSignature(&rootSignatureDesc, m_featureData.HighestVersion,
+        &signature, &error));
+    ThrowIfFailed(m_device->CreateRootSignature(0,
+        signature->GetBufferPointer(), signature->GetBufferSize(),
+        IID_PPV_ARGS(&m_sigRenderScene)));
+    NAME_D3D12_OBJECT(m_sigRenderScene);
+}
+
+void D3D12PostprocessBlur::CreateScenePSOs()
+{
+    ComPtr<ID3DBlob> vertexShader;
+    ComPtr<ID3DBlob> pixelShader;
+    
+    ThrowIfFailed(D3DCompileFromFile(GetAssetFullPath(L"shaders.hlsl").c_str(), nullptr, nullptr,
+        "VSMain", "vs_5_0", m_compileFlags, 0, &vertexShader, nullptr));
+    ThrowIfFailed(D3DCompileFromFile(GetAssetFullPath(L"shaders.hlsl").c_str(), nullptr, nullptr,
+        "PSMain", "ps_5_0", m_compileFlags, 0, &pixelShader, nullptr));
+
+    D3D12_INPUT_LAYOUT_DESC inputLayoutDesc;
+    inputLayoutDesc.pInputElementDescs = SampleAssets::StandardVertexDescription;
+    inputLayoutDesc.NumElements = _countof(SampleAssets::StandardVertexDescription);
+
+    CD3DX12_DEPTH_STENCIL_DESC depthStencilDesc(D3D12_DEFAULT);
+    depthStencilDesc.DepthEnable = true;
+    depthStencilDesc.DepthWriteMask = D3D12_DEPTH_WRITE_MASK_ALL;
+    depthStencilDesc.DepthFunc = D3D12_COMPARISON_FUNC_LESS_EQUAL;
+    depthStencilDesc.StencilEnable = FALSE;
+
+    // Describe and create the PSO for rendering the scene.
+    D3D12_GRAPHICS_PIPELINE_STATE_DESC psoDesc = {};
+    psoDesc.InputLayout = inputLayoutDesc;
+    psoDesc.pRootSignature = m_sigRenderScene.Get();
+    psoDesc.VS = CD3DX12_SHADER_BYTECODE(vertexShader.Get());
+    psoDesc.PS = CD3DX12_SHADER_BYTECODE(pixelShader.Get());
+    psoDesc.RasterizerState = CD3DX12_RASTERIZER_DESC(D3D12_DEFAULT);
+    psoDesc.BlendState = CD3DX12_BLEND_DESC(D3D12_DEFAULT);
+    psoDesc.DepthStencilState = depthStencilDesc;
+    psoDesc.SampleMask = UINT_MAX;
+    psoDesc.PrimitiveTopologyType = D3D12_PRIMITIVE_TOPOLOGY_TYPE_TRIANGLE;
+    psoDesc.NumRenderTargets = 1;
+    psoDesc.RTVFormats[0] = DXGI_FORMAT_R8G8B8A8_UNORM;
+    psoDesc.DSVFormat = DXGI_FORMAT_D32_FLOAT;
+    psoDesc.SampleDesc.Count = 1;
+
+    ThrowIfFailed(m_device->CreateGraphicsPipelineState(&psoDesc, IID_PPV_ARGS(&m_psoRenderScene)));
+    NAME_D3D12_OBJECT(m_psoRenderScene);
+
+    // Alter the description and create the PSO for rendering
+    // the shadow map.  The shadow map does not use a pixel
+    // shader or render targets.
+    psoDesc.PS = CD3DX12_SHADER_BYTECODE(0, 0);
+    psoDesc.RTVFormats[0] = DXGI_FORMAT_UNKNOWN;
+    psoDesc.NumRenderTargets = 0;
+
+    ThrowIfFailed(m_device->CreateGraphicsPipelineState(&psoDesc, IID_PPV_ARGS(&m_psoRenderShadow)));
+    NAME_D3D12_OBJECT(m_psoRenderShadow);
+}
+
+
+// Load the sample assets.
+void D3D12PostprocessBlur::CreateSceneResources()
+{
+    CreateDescriptorHeaps();
+    CreateSceneSignatures();
+    CreateScenePSOs();
+
+    
+    
+
 
     // Create the depth stencil.
     {
-        CD3DX12_RESOURCE_DESC shadowTextureDesc(
+        CD3DX12_RESOURCE_DESC depthBufferDesc(
             D3D12_RESOURCE_DIMENSION_TEXTURE2D,
             0,
             static_cast<UINT>(m_viewport.Width), 
@@ -320,7 +334,7 @@ void D3D12PostprocessBlur::LoadAssets()
         ThrowIfFailed(m_device->CreateCommittedResource(
             &CD3DX12_HEAP_PROPERTIES(D3D12_HEAP_TYPE_DEFAULT),
             D3D12_HEAP_FLAG_NONE,
-            &shadowTextureDesc,
+            &depthBufferDesc,
             D3D12_RESOURCE_STATE_DEPTH_WRITE,
             &clearValue,
             IID_PPV_ARGS(&m_depthStencil)));
@@ -365,17 +379,17 @@ void D3D12PostprocessBlur::LoadAssets()
             vertexData.RowPitch = SampleAssets::VertexDataSize;
             vertexData.SlicePitch = vertexData.RowPitch;
 
-            PIXBeginEvent(commandList.Get(), 0, L"Copy vertex buffer data to default resource...");
+            PIXBeginEvent(m_commandList.Get(), 0, L"Copy vertex buffer data to default resource...");
 
-            UpdateSubresources<1>(commandList.Get(),
+            UpdateSubresources<1>(m_commandList.Get(),
                 m_vertexBuffer.Get(), m_vertexBufferUpload.Get(),
                 0, 0, 1, &vertexData);
             
-            commandList->ResourceBarrier(1,
+            m_commandList->ResourceBarrier(1,
                 &CD3DX12_RESOURCE_BARRIER::Transition(m_vertexBuffer.Get(),
                     D3D12_RESOURCE_STATE_COPY_DEST, D3D12_RESOURCE_STATE_VERTEX_AND_CONSTANT_BUFFER));
 
-            PIXEndEvent(commandList.Get());
+            PIXEndEvent(m_commandList.Get());
         }
 
         // Initialize the vertex buffer view.
@@ -412,16 +426,16 @@ void D3D12PostprocessBlur::LoadAssets()
             indexData.RowPitch = SampleAssets::IndexDataSize;
             indexData.SlicePitch = indexData.RowPitch;
 
-            PIXBeginEvent(commandList.Get(), 0, L"Copy index buffer data to default resource...");
+            PIXBeginEvent(m_commandList.Get(), 0, L"Copy index buffer data to default resource...");
 
-            UpdateSubresources<1>(commandList.Get(),
+            UpdateSubresources<1>(m_commandList.Get(),
                 m_indexBuffer.Get(), m_indexBufferUpload.Get(),
                 0, 0, 1, &indexData);
-            commandList->ResourceBarrier(1,
+            m_commandList->ResourceBarrier(1,
                 &CD3DX12_RESOURCE_BARRIER::Transition(m_indexBuffer.Get(),
                     D3D12_RESOURCE_STATE_COPY_DEST, D3D12_RESOURCE_STATE_INDEX_BUFFER));
 
-            PIXEndEvent(commandList.Get());
+            PIXEndEvent(m_commandList.Get());
         }
 
         // Initialize the index buffer view.
@@ -430,11 +444,14 @@ void D3D12PostprocessBlur::LoadAssets()
         m_indexBufferView.Format = SampleAssets::StandardIndexFormat;
     }
 
+    // Get the CBV SRV descriptor size for the current device.
+    m_defaultDescriptorSize = m_device->GetDescriptorHandleIncrementSize(D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV);
+    m_srvNullGPU = m_cbvSrvHeap->GetGPUDescriptorHandleForHeapStart();
+    m_srvFirstTextureGPU = CD3DX12_GPU_DESCRIPTOR_HANDLE(m_cbvSrvHeap->GetGPUDescriptorHandleForHeapStart(),
+        2, m_defaultDescriptorSize);
+    
     // Create shader resources.
     {
-        // Get the CBV SRV descriptor size for the current device.
-        const UINT cbvSrvDescriptorSize = m_device->GetDescriptorHandleIncrementSize(D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV);
-
         // Get a handle to the start of the descriptor heap.
         CD3DX12_CPU_DESCRIPTOR_HANDLE cbvSrvHandle(m_cbvSrvHeap->GetCPUDescriptorHandleForHeapStart());
 
@@ -450,15 +467,15 @@ void D3D12PostprocessBlur::LoadAssets()
             nullSrvDesc.Texture2D.ResourceMinLODClamp = 0.0f;
 
             m_device->CreateShaderResourceView(nullptr, &nullSrvDesc, cbvSrvHandle);
-            cbvSrvHandle.Offset(cbvSrvDescriptorSize);
+            cbvSrvHandle.Offset(m_defaultDescriptorSize);
 
             m_device->CreateShaderResourceView(nullptr, &nullSrvDesc, cbvSrvHandle);
-            cbvSrvHandle.Offset(cbvSrvDescriptorSize);
+            cbvSrvHandle.Offset(m_defaultDescriptorSize);
         }
 
         // Create each texture and SRV descriptor.
         const UINT srvCount = _countof(SampleAssets::Textures);
-        PIXBeginEvent(commandList.Get(), 0, L"Copy diffuse and normal texture data to default resources...");
+        PIXBeginEvent(m_commandList.Get(), 0, L"Copy diffuse and normal texture data to default resources...");
         for (UINT i = 0; i < srvCount; i++)
         {
             // Describe and create a Texture2D.
@@ -505,10 +522,10 @@ void D3D12PostprocessBlur::LoadAssets()
                 textureData.RowPitch = tex.Data->Pitch;
                 textureData.SlicePitch = tex.Data->Size;
 
-                UpdateSubresources(commandList.Get(),
+                UpdateSubresources(m_commandList.Get(),
                     m_textures[i].Get(), m_textureUploads[i].Get(),
                     0, 0, subresourceCount, &textureData);
-                commandList->ResourceBarrier(1,
+                m_commandList->ResourceBarrier(1,
                     &CD3DX12_RESOURCE_BARRIER::Transition(m_textures[i].Get(),
                         D3D12_RESOURCE_STATE_COPY_DEST, D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE));
             }
@@ -524,10 +541,10 @@ void D3D12PostprocessBlur::LoadAssets()
             m_device->CreateShaderResourceView(m_textures[i].Get(), &srvDesc, cbvSrvHandle);
 
             // Move to the next descriptor slot.
-            cbvSrvHandle.Offset(cbvSrvDescriptorSize);
+            cbvSrvHandle.Offset(m_defaultDescriptorSize);
         }
         
-        PIXEndEvent(commandList.Get());
+        PIXEndEvent(m_commandList.Get());
     }
 
     free(pAssetData);
@@ -592,20 +609,21 @@ void D3D12PostprocessBlur::LoadAssets()
     }
 
     // Close the command list and use it to execute the initial GPU setup.
-    ThrowIfFailed(commandList->Close());
-    ID3D12CommandList* ppCommandLists[] = { commandList.Get() };
+    ThrowIfFailed(m_commandList->Close());
+    ID3D12CommandList* ppCommandLists[] = { m_commandList.Get() };
     m_commandQueue->ExecuteCommandLists(_countof(ppCommandLists), ppCommandLists);
 
     // Create frame resources.
     for (int i = 0; i < FrameCount; i++)
     {
-        m_frameResources[i] = new FrameResource(m_device.Get(),
-            m_pipelineState.Get(), m_pipelineStateShadowMap.Get(),
-            m_rtvHeap.Get(), m_dsvHeap.Get(), m_cbvSrvHeap.Get(),
-            &m_viewport, i);
+        m_frameResources[i] = new FrameResource(this,
+            m_backBuffers[i].Get(), rtvBackBuffer[i],
+            i);
         
-        m_frameResources[i]->WriteConstantBuffers(&m_viewport, &m_camera, m_lightCameras, m_lights);
+        m_frameResources[i]->WriteConstantBuffers(m_viewport, &m_camera,
+            m_lightCameras, m_lights, NumLights);
     }
+    
     m_currentFrameResourceIndex = 0;
     m_pCurrentFrameResource = m_frameResources[m_currentFrameResourceIndex];
 
@@ -636,58 +654,6 @@ void D3D12PostprocessBlur::LoadAssets()
     }
 }
 
-// Initialize threads and events.
-void D3D12PostprocessBlur::LoadContexts()
-{
-#if !SINGLETHREADED
-    struct threadwrapper
-    {
-        static unsigned int WINAPI thunk(LPVOID lpParameter)
-        {
-            ThreadParameter* parameter = reinterpret_cast<ThreadParameter*>(lpParameter);
-            D3D12PostprocessBlur::Get()->WorkerThread(parameter->threadIndex);
-            return 0;
-        }
-    };
-
-    for (int i = 0; i < NumContexts; i++)
-    {
-        m_workerBeginRenderFrame[i] = CreateEvent(
-            NULL,
-            FALSE,
-            FALSE,
-            NULL);
-
-        m_workerFinishedRenderFrame[i] = CreateEvent(
-            NULL,
-            FALSE,
-            FALSE,
-            NULL);
-
-        m_workerFinishShadowPass[i] = CreateEvent(
-            NULL,
-            FALSE,
-            FALSE,
-            NULL);
-
-        m_threadParameters[i].threadIndex = i;
-
-        m_threadHandles[i] = reinterpret_cast<HANDLE>(_beginthreadex(
-            nullptr,
-            0,
-            threadwrapper::thunk,
-            reinterpret_cast<LPVOID>(&m_threadParameters[i]),
-            0,
-            nullptr));
-
-        assert(m_workerBeginRenderFrame[i] != NULL);
-        assert(m_workerFinishedRenderFrame[i] != NULL);
-        assert(m_threadHandles[i] != NULL);
-
-    }
-#endif
-}
-
 // Update frame-based values.
 void D3D12PostprocessBlur::OnUpdate()
 {
@@ -705,14 +671,14 @@ void D3D12PostprocessBlur::OnUpdate()
 
     // Make sure that this frame resource isn't still in use by the GPU.
     // If it is, wait for it to complete.
-    if (m_pCurrentFrameResource->m_fenceValue > lastCompletedFence)
+    if (m_pCurrentFrameResource->fenceValue > lastCompletedFence)
     {
         HANDLE eventHandle = CreateEvent(nullptr, FALSE, FALSE, nullptr);
         if (eventHandle == nullptr)
         {
             ThrowIfFailed(HRESULT_FROM_WIN32(GetLastError()));
         }
-        ThrowIfFailed(m_fence->SetEventOnCompletion(m_pCurrentFrameResource->m_fenceValue, eventHandle));
+        ThrowIfFailed(m_fence->SetEventOnCompletion(m_pCurrentFrameResource->fenceValue, eventHandle));
         WaitForSingleObject(eventHandle, INFINITE);
         CloseHandle(eventHandle);
     }
@@ -747,7 +713,7 @@ void D3D12PostprocessBlur::OnUpdate()
         }
     }
 
-    m_pCurrentFrameResource->WriteConstantBuffers(&m_viewport, &m_camera, m_lightCameras, m_lights);
+    m_pCurrentFrameResource->WriteConstantBuffers(m_viewport, &m_camera, m_lightCameras, m_lights, NumLights);
 }
 
 // Render the scene.
@@ -757,7 +723,6 @@ void D3D12PostprocessBlur::OnRender()
     {
         BeginFrame();
 
-#if SINGLETHREADED
         for (int i = 0; i < NumContexts; i++)
         {
             WorkerThread(i);
@@ -765,27 +730,6 @@ void D3D12PostprocessBlur::OnRender()
         MidFrame();
         EndFrame();
         m_commandQueue->ExecuteCommandLists(_countof(m_pCurrentFrameResource->m_batchSubmit), m_pCurrentFrameResource->m_batchSubmit);
-#else
-        for (int i = 0; i < NumContexts; i++)
-        {
-            SetEvent(m_workerBeginRenderFrame[i]); // Tell each worker to start drawing.
-        }
-
-        MidFrame();
-        EndFrame();
-
-        WaitForMultipleObjects(NumContexts, m_workerFinishShadowPass, TRUE, INFINITE);
-
-        // You can execute command lists on any thread. Depending on the work 
-        // load, apps can choose between using ExecuteCommandLists on one thread 
-        // vs ExecuteCommandList from multiple threads.
-        m_commandQueue->ExecuteCommandLists(NumContexts + 2, m_pCurrentFrameResource->m_batchSubmit); // Submit PRE, MID and shadows.
-
-        WaitForMultipleObjects(NumContexts, m_workerFinishedRenderFrame, TRUE, INFINITE);
-
-        // Submit remaining command lists.
-        m_commandQueue->ExecuteCommandLists(_countof(m_pCurrentFrameResource->m_batchSubmit) - NumContexts - 2, m_pCurrentFrameResource->m_batchSubmit + NumContexts + 2);
-#endif
 
         m_cpuTimer.Tick(NULL);
         if (m_titleCount == TitleThrottle)
@@ -811,7 +755,7 @@ void D3D12PostprocessBlur::OnRender()
         m_frameIndex = m_swapChain->GetCurrentBackBufferIndex();
 
         // Signal and increment the fence value.
-        m_pCurrentFrameResource->m_fenceValue = m_fenceValue;
+        m_pCurrentFrameResource->fenceValue = m_fenceValue;
         ThrowIfFailed(m_commandQueue->Signal(m_fence.Get(), m_fenceValue));
         m_fenceValue++;
     }
@@ -832,7 +776,7 @@ void D3D12PostprocessBlur::OnRender()
 void D3D12PostprocessBlur::ReleaseD3DResources()
 {
     m_fence.Reset();
-    ResetComPtrArray(&m_renderTargets);
+    ResetComPtrArray(&m_backBuffers);
     m_commandQueue.Reset();
     m_swapChain.Reset();
     m_device.Reset();
@@ -884,15 +828,6 @@ void D3D12PostprocessBlur::OnDestroy()
             WaitForSingleObject(m_fenceEvent, INFINITE);
         }
         CloseHandle(m_fenceEvent);
-    }
-
-    // Close thread events and thread handles.
-    for (int i = 0; i < NumContexts; i++)
-    {
-        CloseHandle(m_workerBeginRenderFrame[i]);
-        CloseHandle(m_workerFinishShadowPass[i]);
-        CloseHandle(m_workerFinishedRenderFrame[i]);
-        CloseHandle(m_threadHandles[i]);
     }
 
     for (int i = 0; i < _countof(m_frameResources); i++)
@@ -947,16 +882,8 @@ void D3D12PostprocessBlur::BeginFrame()
 {
     m_pCurrentFrameResource->Init();
 
-    // Indicate that the back buffer will be used as a render target.
-    m_pCurrentFrameResource->m_commandLists[CommandListPre]->ResourceBarrier(1, &CD3DX12_RESOURCE_BARRIER::Transition(m_renderTargets[m_frameIndex].Get(), D3D12_RESOURCE_STATE_PRESENT, D3D12_RESOURCE_STATE_RENDER_TARGET));
 
-    // Clear the render target and depth stencil.
-    const float clearColor[] = { 0.0f, 0.0f, 0.0f, 1.0f };
-    CD3DX12_CPU_DESCRIPTOR_HANDLE rtvHandle(m_rtvHeap->GetCPUDescriptorHandleForHeapStart(), m_frameIndex, m_rtvDescriptorSize);
-    m_pCurrentFrameResource->m_commandLists[CommandListPre]->ClearRenderTargetView(rtvHandle, clearColor, 0, nullptr);
-    m_pCurrentFrameResource->m_commandLists[CommandListPre]->ClearDepthStencilView(m_dsvHeap->GetCPUDescriptorHandleForHeapStart(), D3D12_CLEAR_FLAG_DEPTH, 1.0f, 0, 0, nullptr);
 
-    ThrowIfFailed(m_pCurrentFrameResource->m_commandLists[CommandListPre]->Close());
 }
 
 // Assemble the CommandListMid command list.
@@ -974,7 +901,7 @@ void D3D12PostprocessBlur::EndFrame()
     m_pCurrentFrameResource->Finish();
 
     // Indicate that the back buffer will now be used to present.
-    m_pCurrentFrameResource->m_commandLists[CommandListPost]->ResourceBarrier(1, &CD3DX12_RESOURCE_BARRIER::Transition(m_renderTargets[m_frameIndex].Get(), D3D12_RESOURCE_STATE_RENDER_TARGET, D3D12_RESOURCE_STATE_PRESENT));
+    m_pCurrentFrameResource->m_commandLists[CommandListPost]->ResourceBarrier(1, &CD3DX12_RESOURCE_BARRIER::Transition(m_backBuffers[m_frameIndex].Get(), D3D12_RESOURCE_STATE_RENDER_TARGET, D3D12_RESOURCE_STATE_PRESENT));
 
     ThrowIfFailed(m_pCurrentFrameResource->m_commandLists[CommandListPost]->Close());
 }
@@ -1068,7 +995,7 @@ void D3D12PostprocessBlur::WorkerThread(int threadIndex)
 
 void D3D12PostprocessBlur::SetCommonPipelineState(ID3D12GraphicsCommandList* pCommandList)
 {
-    pCommandList->SetGraphicsRootSignature(m_rootSignature.Get());
+    pCommandList->SetGraphicsRootSignature(m_sigRenderScene.Get());
 
     ID3D12DescriptorHeap* ppHeaps[] = { m_cbvSrvHeap.Get(), m_samplerHeap.Get() };
     pCommandList->SetDescriptorHeaps(_countof(ppHeaps), ppHeaps);

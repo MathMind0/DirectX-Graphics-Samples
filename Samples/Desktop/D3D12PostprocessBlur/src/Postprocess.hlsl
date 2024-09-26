@@ -3,7 +3,7 @@ static const float weight[BLUR_RADIUS] = {0.3829, 0.2417, 0.0606, 0.0060, 0.0002
 
 struct ScreenInfo
 {
-    uint4 size; //xy = size, zw = 1 / size.
+    uint4 size; //x = viewport width, y = viewport height.
 };
 
 Texture2D texSceneColor : register(t0);

@@ -19,62 +19,79 @@
 using namespace DirectX;
 using namespace Microsoft::WRL;
 
+enum DESCRIPTORS
+{
+    SHADOW_SRV,
+    SHADOW_CBV,
+    SCENE_CBV,
+    SCREEN_COLOR_SRV,
+    NUM_DESCRIPTORS
+};
+
+struct LightState
+{
+    XMFLOAT4 position;
+    XMFLOAT4 direction;
+    XMFLOAT4 color;
+    XMFLOAT4 falloff;
+
+    XMFLOAT4X4 view;
+    XMFLOAT4X4 projection;
+};
+
+struct SceneConstantBuffer
+{
+    XMFLOAT4X4 model;
+    XMFLOAT4X4 view;
+    XMFLOAT4X4 projection;
+    XMFLOAT4 ambientColor;
+    BOOL sampleShadowMap;
+    BOOL padding[3];        // Must be aligned to be made up of N float4s.
+    LightState lights[NumLights];
+};
+
 struct ScreenInfo
 {
     UINT size[4];
 };
 
-class FrameResource
+struct FrameResource
 {
-private:
-    ComPtr<ID3D12CommandAllocator> m_commandAllocator;
-    ComPtr<ID3D12CommandList> m_commandList;
-    
-    UINT64 m_fenceValue;
-    
-    enum DESCRIPTORS
-    {
-        SHADOW_SRV,
-        SHADOW_CBV,
-        SCENE_CBV,
-        SCREEN_COLOR_SRV,
-        NUM_DESCRIPTORS
-    };
-    
-    ComPtr<ID3D12PipelineState> m_pipelineState;
-    ComPtr<ID3D12PipelineState> m_pipelineStateShadowMap;
-    ComPtr<ID3D12Resource> m_shadowTexture;
-    D3D12_CPU_DESCRIPTOR_HANDLE m_shadowDepthView;
-    ComPtr<ID3D12Resource> m_shadowConstantBuffer;
-    ComPtr<ID3D12Resource> m_sceneConstantBuffer;
-    SceneConstantBuffer* mp_shadowConstantBufferWO; // WRITE-ONLY pointer to the shadow pass constant buffer.
-    SceneConstantBuffer* mp_sceneConstantBufferWO;  // WRITE-ONLY pointer to the scene pass constant buffer.
-    D3D12_GPU_DESCRIPTOR_HANDLE m_nullSrvHandle;    // Null SRV for out of bounds behavior.
-    D3D12_GPU_DESCRIPTOR_HANDLE m_shadowDepthHandle;
-    D3D12_GPU_DESCRIPTOR_HANDLE m_shadowCbvHandle;
-    D3D12_GPU_DESCRIPTOR_HANDLE m_sceneCbvHandle;
+public:    
+    ComPtr<ID3D12CommandAllocator> commandAllocator;
+    ComPtr<ID3D12GraphicsCommandList> commandList;
+    UINT64 fenceValue;
 
-    // Resources for postprocess
-    ComPtr<ID3D12Resource> m_texSceneColor;
-    D3D12_GPU_DESCRIPTOR_HANDLE m_rtvSceneColorGpu;
-    D3D12_CPU_DESCRIPTOR_HANDLE m_rtvSceneColorCpu;
-    D3D12_GPU_DESCRIPTOR_HANDLE m_srvSceneColorGpu;
-    D3D12_CPU_DESCRIPTOR_HANDLE m_srvSceneColorCpu;
-    ComPtr<ID3D12Resource> m_cbScreenInfo;
-    ScreenInfo* m_pScreenInfo;
+    ComPtr<ID3D12Resource> backBuffer;
+    D3D12_CPU_DESCRIPTOR_HANDLE rvtBackBuffer;
+
+    ComPtr<ID3D12Resource> cbShadow;
+    ComPtr<ID3D12Resource> cbScene;
+    SceneConstantBuffer* pShadowData; // WRITE-ONLY pointer to the shadow pass constant buffer.
+    SceneConstantBuffer* pSceneData;  // WRITE-ONLY pointer to the scene pass constant buffer.
+    D3D12_GPU_DESCRIPTOR_HANDLE cbvShadow;
+    D3D12_GPU_DESCRIPTOR_HANDLE cbvScene;
+
+    // Constant Buffer for postprocess
+    ComPtr<ID3D12Resource> cbScreenInfo;
+    ScreenInfo* pScreenInfoData;
     
 public:
-    FrameResource(ID3D12Device* pDevice, ID3D12PipelineState* pPso, ID3D12PipelineState* pShadowMapPso,
-        ID3D12DescriptorHeap* pRtvHeap, ID3D12DescriptorHeap* pDsvHeap, ID3D12DescriptorHeap* pCbvSrvHeap,
-        D3D12_VIEWPORT* pViewport, UINT frameResourceIndex);
+    FrameResource(ID3D12Device* pDevice,
+        ID3D12DescriptorHeap* pCbvSrvHeap, 
+        UINT frameResourceIndex);
     
     ~FrameResource();
 
-    void Bind(ID3D12GraphicsCommandList* pCommandList, BOOL scenePass,
-        D3D12_CPU_DESCRIPTOR_HANDLE* pRtvHandle, D3D12_CPU_DESCRIPTOR_HANDLE* pDsvHandle);
-    void Init();
-    void SwapBarriers();
-    void Finish();
-    void WriteConstantBuffers(D3D12_VIEWPORT* pViewport, Camera* pSceneCamera,
-        Camera lightCams[NumLights], LightState lights[NumLights]);
+    void WriteConstantBuffers(const D3D12_VIEWPORT& viewport, Camera* pSceneCamera,
+                              Camera* lightCams, LightState* lights, int NumLights);
+
+    void RenderFrame();
+
+private:
+    void FrameBegin();
+    void RenderShadow();
+    void RenderScene();
+    void RenderPostprocess();
+    void FrameEnd();
 };
