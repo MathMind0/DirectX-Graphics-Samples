@@ -196,23 +196,27 @@ void D3D12PostprocessBlur::CreateDescriptorHeaps()
     m_defaultDescriptorSize = m_device->GetDescriptorHandleIncrementSize(D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV);
 }
 
-void D3D12PostprocessBlur::CreateBackBuffers()
+void D3D12PostprocessBlur::CreateFrameResources()
 {
-    // Create render target views (RTVs).
     CD3DX12_CPU_DESCRIPTOR_HANDLE rtvHandle(m_rtvHeap->GetCPUDescriptorHandleForHeapStart());
-    D3D12_CPU_DESCRIPTOR_HANDLE rtvBackBuffer[FrameCount];
+    ComPtr<ID3D12Resource> backBuffer;
     
     for (UINT i = 0; i < FrameCount; i++)
     {
-        rtvBackBuffer[i] = rtvHandle;
-        ThrowIfFailed(m_swapChain->GetBuffer(i, IID_PPV_ARGS(&m_backBuffers[i])));
-        m_device->CreateRenderTargetView(m_backBuffers[i].Get(), nullptr, rtvHandle);
+        ThrowIfFailed(m_swapChain->GetBuffer(i, IID_PPV_ARGS(&backBuffer)));
+        m_device->CreateRenderTargetView(backBuffer.Get(), nullptr, rtvHandle);
+
+        m_frameResources[i] = new FrameResource(m_device.Get(), m_cbvSrvHeap.Get(),
+            backBuffer.Get(), rtvHandle, i);
+        
+        m_frameResources[i]->WriteConstantBuffers(m_viewport, &m_camera,
+            m_lightCameras, m_lights, NumLights);
+        
         rtvHandle.Offset(1, m_rtvDescriptorSize);
 
-        NAME_D3D12_OBJECT_INDEXED(m_backBuffers, i);
+        NAME_D3D12_OBJECT(backBuffer);
     }
 }
-
 
 void D3D12PostprocessBlur::CreateSceneSignatures()
 {
@@ -299,21 +303,9 @@ void D3D12PostprocessBlur::CreateScenePSOs()
     NAME_D3D12_OBJECT(m_psoRenderShadow);
 }
 
-
-// Load the sample assets.
-void D3D12PostprocessBlur::CreateSceneResources()
+void D3D12PostprocessBlur::CreateDepthBuffer()
 {
-    CreateDescriptorHeaps();
-    CreateSceneSignatures();
-    CreateScenePSOs();
-
-    
-    
-
-
-    // Create the depth stencil.
-    {
-        CD3DX12_RESOURCE_DESC depthBufferDesc(
+    CD3DX12_RESOURCE_DESC depthBufferDesc(
             D3D12_RESOURCE_DIMENSION_TEXTURE2D,
             0,
             static_cast<UINT>(m_viewport.Width), 
@@ -326,34 +318,43 @@ void D3D12PostprocessBlur::CreateSceneResources()
             D3D12_TEXTURE_LAYOUT_UNKNOWN,
             D3D12_RESOURCE_FLAG_ALLOW_DEPTH_STENCIL | D3D12_RESOURCE_FLAG_DENY_SHADER_RESOURCE);
 
-        D3D12_CLEAR_VALUE clearValue;    // Performance tip: Tell the runtime at resource creation the desired clear value.
-        clearValue.Format = DXGI_FORMAT_D32_FLOAT;
-        clearValue.DepthStencil.Depth = 1.0f;
-        clearValue.DepthStencil.Stencil = 0;
+    D3D12_CLEAR_VALUE clearValue;    // Performance tip: Tell the runtime at resource creation the desired clear value.
+    clearValue.Format = DXGI_FORMAT_D32_FLOAT;
+    clearValue.DepthStencil.Depth = 1.0f;
+    clearValue.DepthStencil.Stencil = 0;
 
-        ThrowIfFailed(m_device->CreateCommittedResource(
-            &CD3DX12_HEAP_PROPERTIES(D3D12_HEAP_TYPE_DEFAULT),
-            D3D12_HEAP_FLAG_NONE,
-            &depthBufferDesc,
-            D3D12_RESOURCE_STATE_DEPTH_WRITE,
-            &clearValue,
-            IID_PPV_ARGS(&m_depthStencil)));
+    ThrowIfFailed(m_device->CreateCommittedResource(
+        &CD3DX12_HEAP_PROPERTIES(D3D12_HEAP_TYPE_DEFAULT),
+        D3D12_HEAP_FLAG_NONE,
+        &depthBufferDesc,
+        D3D12_RESOURCE_STATE_DEPTH_WRITE,
+        &clearValue,
+        IID_PPV_ARGS(&m_depthStencil)));
 
-        NAME_D3D12_OBJECT(m_depthStencil);
+    NAME_D3D12_OBJECT(m_depthStencil);
 
-        // Create the depth stencil view.
-        m_device->CreateDepthStencilView(m_depthStencil.Get(),
-            nullptr, m_dsvHeap->GetCPUDescriptorHandleForHeapStart());
-    }
+    // Create the depth stencil view.
+    m_device->CreateDepthStencilView(m_depthStencil.Get(),
+        nullptr, m_dsvHeap->GetCPUDescriptorHandleForHeapStart());
+}
 
+void D3D12PostprocessBlur::CreateSceneAssets()
+{
     // Load scene assets.
     UINT fileSize = 0;
     UINT8* pAssetData;
     ThrowIfFailed(ReadDataFromFile(GetAssetFullPath(SampleAssets::DataFileName).c_str(), &pAssetData, &fileSize));
 
-    // Create the vertex buffer.
-    {
-        ThrowIfFailed(m_device->CreateCommittedResource(
+    LoadAssetVertexBuffer(pAssetData);
+    LoadAssetIndexBuffer(pAssetData);
+    LoadAssetTextures(pAssetData);
+    
+    free(pAssetData);
+}
+
+void D3D12PostprocessBlur::LoadAssetVertexBuffer(const UINT8* pAssetData)
+{
+    ThrowIfFailed(m_device->CreateCommittedResource(
             &CD3DX12_HEAP_PROPERTIES(D3D12_HEAP_TYPE_DEFAULT),
             D3D12_HEAP_FLAG_NONE,
             &CD3DX12_RESOURCE_DESC::Buffer(SampleAssets::VertexDataSize),
@@ -361,46 +362,44 @@ void D3D12PostprocessBlur::CreateSceneResources()
             nullptr,
             IID_PPV_ARGS(&m_vertexBuffer)));
 
-        NAME_D3D12_OBJECT(m_vertexBuffer);
+    NAME_D3D12_OBJECT(m_vertexBuffer);
 
-        {
-            ThrowIfFailed(m_device->CreateCommittedResource(
-                &CD3DX12_HEAP_PROPERTIES(D3D12_HEAP_TYPE_UPLOAD),
-                D3D12_HEAP_FLAG_NONE,
-                &CD3DX12_RESOURCE_DESC::Buffer(SampleAssets::VertexDataSize),
-                D3D12_RESOURCE_STATE_GENERIC_READ,
-                nullptr,
-                IID_PPV_ARGS(&m_vertexBufferUpload)));
+    ThrowIfFailed(m_device->CreateCommittedResource(
+        &CD3DX12_HEAP_PROPERTIES(D3D12_HEAP_TYPE_UPLOAD),
+        D3D12_HEAP_FLAG_NONE,
+        &CD3DX12_RESOURCE_DESC::Buffer(SampleAssets::VertexDataSize),
+        D3D12_RESOURCE_STATE_GENERIC_READ,
+        nullptr,
+        IID_PPV_ARGS(&m_vertexBufferUpload)));
 
-            // Copy data to the upload heap and then schedule a copy 
-            // from the upload heap to the vertex buffer.
-            D3D12_SUBRESOURCE_DATA vertexData = {};
-            vertexData.pData = pAssetData + SampleAssets::VertexDataOffset;
-            vertexData.RowPitch = SampleAssets::VertexDataSize;
-            vertexData.SlicePitch = vertexData.RowPitch;
+    // Copy data to the upload heap and then schedule a copy 
+    // from the upload heap to the vertex buffer.
+    D3D12_SUBRESOURCE_DATA vertexData = {};
+    vertexData.pData = pAssetData + SampleAssets::VertexDataOffset;
+    vertexData.RowPitch = SampleAssets::VertexDataSize;
+    vertexData.SlicePitch = vertexData.RowPitch;
 
-            PIXBeginEvent(m_commandList.Get(), 0, L"Copy vertex buffer data to default resource...");
+    PIXBeginEvent(m_commandList.Get(), 0, L"Copy vertex buffer data to default resource...");
 
-            UpdateSubresources<1>(m_commandList.Get(),
-                m_vertexBuffer.Get(), m_vertexBufferUpload.Get(),
-                0, 0, 1, &vertexData);
-            
-            m_commandList->ResourceBarrier(1,
-                &CD3DX12_RESOURCE_BARRIER::Transition(m_vertexBuffer.Get(),
-                    D3D12_RESOURCE_STATE_COPY_DEST, D3D12_RESOURCE_STATE_VERTEX_AND_CONSTANT_BUFFER));
+    UpdateSubresources<1>(m_commandList.Get(),
+        m_vertexBuffer.Get(), m_vertexBufferUpload.Get(),
+        0, 0, 1, &vertexData);
+        
+    m_commandList->ResourceBarrier(1,
+        &CD3DX12_RESOURCE_BARRIER::Transition(m_vertexBuffer.Get(),
+            D3D12_RESOURCE_STATE_COPY_DEST, D3D12_RESOURCE_STATE_VERTEX_AND_CONSTANT_BUFFER));
 
-            PIXEndEvent(m_commandList.Get());
-        }
+    PIXEndEvent(m_commandList.Get());
 
-        // Initialize the vertex buffer view.
-        m_vertexBufferView.BufferLocation = m_vertexBuffer->GetGPUVirtualAddress();
-        m_vertexBufferView.SizeInBytes = SampleAssets::VertexDataSize;
-        m_vertexBufferView.StrideInBytes = SampleAssets::StandardVertexStride;
-    }
+    // Initialize the vertex buffer view.
+    m_vertexBufferView.BufferLocation = m_vertexBuffer->GetGPUVirtualAddress();
+    m_vertexBufferView.SizeInBytes = SampleAssets::VertexDataSize;
+    m_vertexBufferView.StrideInBytes = SampleAssets::StandardVertexStride;
+}
 
-    // Create the index buffer.
-    {
-        ThrowIfFailed(m_device->CreateCommittedResource(
+void D3D12PostprocessBlur::LoadAssetIndexBuffer(const UINT8* pAssetData)
+{
+    ThrowIfFailed(m_device->CreateCommittedResource(
             &CD3DX12_HEAP_PROPERTIES(D3D12_HEAP_TYPE_DEFAULT),
             D3D12_HEAP_FLAG_NONE,
             &CD3DX12_RESOURCE_DESC::Buffer(SampleAssets::IndexDataSize),
@@ -408,44 +407,42 @@ void D3D12PostprocessBlur::CreateSceneResources()
             nullptr,
             IID_PPV_ARGS(&m_indexBuffer)));
 
-        NAME_D3D12_OBJECT(m_indexBuffer);
+    NAME_D3D12_OBJECT(m_indexBuffer);
 
-        {
-            ThrowIfFailed(m_device->CreateCommittedResource(
-                &CD3DX12_HEAP_PROPERTIES(D3D12_HEAP_TYPE_UPLOAD),
-                D3D12_HEAP_FLAG_NONE,
-                &CD3DX12_RESOURCE_DESC::Buffer(SampleAssets::IndexDataSize),
-                D3D12_RESOURCE_STATE_GENERIC_READ,
-                nullptr,
-                IID_PPV_ARGS(&m_indexBufferUpload)));
+    ThrowIfFailed(m_device->CreateCommittedResource(
+        &CD3DX12_HEAP_PROPERTIES(D3D12_HEAP_TYPE_UPLOAD),
+        D3D12_HEAP_FLAG_NONE,
+        &CD3DX12_RESOURCE_DESC::Buffer(SampleAssets::IndexDataSize),
+        D3D12_RESOURCE_STATE_GENERIC_READ,
+        nullptr,
+        IID_PPV_ARGS(&m_indexBufferUpload)));
 
-            // Copy data to the upload heap and then schedule a copy 
-            // from the upload heap to the index buffer.
-            D3D12_SUBRESOURCE_DATA indexData = {};
-            indexData.pData = pAssetData + SampleAssets::IndexDataOffset;
-            indexData.RowPitch = SampleAssets::IndexDataSize;
-            indexData.SlicePitch = indexData.RowPitch;
+    // Copy data to the upload heap and then schedule a copy 
+    // from the upload heap to the index buffer.
+    D3D12_SUBRESOURCE_DATA indexData = {};
+    indexData.pData = pAssetData + SampleAssets::IndexDataOffset;
+    indexData.RowPitch = SampleAssets::IndexDataSize;
+    indexData.SlicePitch = indexData.RowPitch;
 
-            PIXBeginEvent(m_commandList.Get(), 0, L"Copy index buffer data to default resource...");
+    PIXBeginEvent(m_commandList.Get(), 0, L"Copy index buffer data to default resource...");
 
-            UpdateSubresources<1>(m_commandList.Get(),
-                m_indexBuffer.Get(), m_indexBufferUpload.Get(),
-                0, 0, 1, &indexData);
-            m_commandList->ResourceBarrier(1,
-                &CD3DX12_RESOURCE_BARRIER::Transition(m_indexBuffer.Get(),
-                    D3D12_RESOURCE_STATE_COPY_DEST, D3D12_RESOURCE_STATE_INDEX_BUFFER));
+    UpdateSubresources<1>(m_commandList.Get(),
+        m_indexBuffer.Get(), m_indexBufferUpload.Get(),
+        0, 0, 1, &indexData);
+    m_commandList->ResourceBarrier(1,
+        &CD3DX12_RESOURCE_BARRIER::Transition(m_indexBuffer.Get(),
+            D3D12_RESOURCE_STATE_COPY_DEST, D3D12_RESOURCE_STATE_INDEX_BUFFER));
 
-            PIXEndEvent(m_commandList.Get());
-        }
+    PIXEndEvent(m_commandList.Get());
 
-        // Initialize the index buffer view.
-        m_indexBufferView.BufferLocation = m_indexBuffer->GetGPUVirtualAddress();
-        m_indexBufferView.SizeInBytes = SampleAssets::IndexDataSize;
-        m_indexBufferView.Format = SampleAssets::StandardIndexFormat;
-    }
+    // Initialize the index buffer view.
+    m_indexBufferView.BufferLocation = m_indexBuffer->GetGPUVirtualAddress();
+    m_indexBufferView.SizeInBytes = SampleAssets::IndexDataSize;
+    m_indexBufferView.Format = SampleAssets::StandardIndexFormat;
+}
 
-    // Get the CBV SRV descriptor size for the current device.
-    m_defaultDescriptorSize = m_device->GetDescriptorHandleIncrementSize(D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV);
+void D3D12PostprocessBlur::LoadAssetTextures(const UINT8* pAssetData)
+{
     m_srvNullGPU = m_cbvSrvHeap->GetGPUDescriptorHandleForHeapStart();
     m_srvFirstTextureGPU = CD3DX12_GPU_DESCRIPTOR_HANDLE(m_cbvSrvHeap->GetGPUDescriptorHandleForHeapStart(),
         2, m_defaultDescriptorSize);
@@ -546,51 +543,52 @@ void D3D12PostprocessBlur::CreateSceneResources()
         
         PIXEndEvent(m_commandList.Get());
     }
+}
 
-    free(pAssetData);
+void D3D12PostprocessBlur::CreateSamplers()
+{
+    // Get the sampler descriptor size for the current device.
+    const UINT samplerDescriptorSize = m_device->GetDescriptorHandleIncrementSize(D3D12_DESCRIPTOR_HEAP_TYPE_SAMPLER);
 
-    // Create the samplers.
-    {
-        // Get the sampler descriptor size for the current device.
-        const UINT samplerDescriptorSize = m_device->GetDescriptorHandleIncrementSize(D3D12_DESCRIPTOR_HEAP_TYPE_SAMPLER);
+    // Get a handle to the start of the descriptor heap.
+    CD3DX12_CPU_DESCRIPTOR_HANDLE samplerHandle(m_samplerHeap->GetCPUDescriptorHandleForHeapStart());
 
-        // Get a handle to the start of the descriptor heap.
-        CD3DX12_CPU_DESCRIPTOR_HANDLE samplerHandle(m_samplerHeap->GetCPUDescriptorHandleForHeapStart());
+    // Describe and create the wrapping sampler, which is used for 
+    // sampling diffuse/normal maps.
+    D3D12_SAMPLER_DESC wrapSamplerDesc = {};
+    wrapSamplerDesc.Filter = D3D12_FILTER_MIN_MAG_MIP_LINEAR;
+    wrapSamplerDesc.AddressU = D3D12_TEXTURE_ADDRESS_MODE_WRAP;
+    wrapSamplerDesc.AddressV = D3D12_TEXTURE_ADDRESS_MODE_WRAP;
+    wrapSamplerDesc.AddressW = D3D12_TEXTURE_ADDRESS_MODE_WRAP;
+    wrapSamplerDesc.MinLOD = 0;
+    wrapSamplerDesc.MaxLOD = D3D12_FLOAT32_MAX;
+    wrapSamplerDesc.MipLODBias = 0.0f;
+    wrapSamplerDesc.MaxAnisotropy = 1;
+    wrapSamplerDesc.ComparisonFunc = D3D12_COMPARISON_FUNC_ALWAYS;
+    wrapSamplerDesc.BorderColor[0] = wrapSamplerDesc.BorderColor[1] = wrapSamplerDesc.BorderColor[2] = wrapSamplerDesc.BorderColor[3] = 0;
+    m_device->CreateSampler(&wrapSamplerDesc, samplerHandle);
 
-        // Describe and create the wrapping sampler, which is used for 
-        // sampling diffuse/normal maps.
-        D3D12_SAMPLER_DESC wrapSamplerDesc = {};
-        wrapSamplerDesc.Filter = D3D12_FILTER_MIN_MAG_MIP_LINEAR;
-        wrapSamplerDesc.AddressU = D3D12_TEXTURE_ADDRESS_MODE_WRAP;
-        wrapSamplerDesc.AddressV = D3D12_TEXTURE_ADDRESS_MODE_WRAP;
-        wrapSamplerDesc.AddressW = D3D12_TEXTURE_ADDRESS_MODE_WRAP;
-        wrapSamplerDesc.MinLOD = 0;
-        wrapSamplerDesc.MaxLOD = D3D12_FLOAT32_MAX;
-        wrapSamplerDesc.MipLODBias = 0.0f;
-        wrapSamplerDesc.MaxAnisotropy = 1;
-        wrapSamplerDesc.ComparisonFunc = D3D12_COMPARISON_FUNC_ALWAYS;
-        wrapSamplerDesc.BorderColor[0] = wrapSamplerDesc.BorderColor[1] = wrapSamplerDesc.BorderColor[2] = wrapSamplerDesc.BorderColor[3] = 0;
-        m_device->CreateSampler(&wrapSamplerDesc, samplerHandle);
+    // Move the handle to the next slot in the descriptor heap.
+    samplerHandle.Offset(samplerDescriptorSize);
 
-        // Move the handle to the next slot in the descriptor heap.
-        samplerHandle.Offset(samplerDescriptorSize);
+    // Describe and create the point clamping sampler, which is 
+    // used for the shadow map.
+    D3D12_SAMPLER_DESC clampSamplerDesc = {};
+    clampSamplerDesc.Filter = D3D12_FILTER_MIN_MAG_MIP_POINT;
+    clampSamplerDesc.AddressU = D3D12_TEXTURE_ADDRESS_MODE_CLAMP;
+    clampSamplerDesc.AddressV = D3D12_TEXTURE_ADDRESS_MODE_CLAMP;
+    clampSamplerDesc.AddressW = D3D12_TEXTURE_ADDRESS_MODE_CLAMP;
+    clampSamplerDesc.MipLODBias = 0.0f;
+    clampSamplerDesc.MaxAnisotropy = 1;
+    clampSamplerDesc.ComparisonFunc = D3D12_COMPARISON_FUNC_ALWAYS;
+    clampSamplerDesc.BorderColor[0] = clampSamplerDesc.BorderColor[1] = clampSamplerDesc.BorderColor[2] = clampSamplerDesc.BorderColor[3] = 0;
+    clampSamplerDesc.MinLOD = 0;
+    clampSamplerDesc.MaxLOD = D3D12_FLOAT32_MAX;
+    m_device->CreateSampler(&clampSamplerDesc, samplerHandle);
+}
 
-        // Describe and create the point clamping sampler, which is 
-        // used for the shadow map.
-        D3D12_SAMPLER_DESC clampSamplerDesc = {};
-        clampSamplerDesc.Filter = D3D12_FILTER_MIN_MAG_MIP_POINT;
-        clampSamplerDesc.AddressU = D3D12_TEXTURE_ADDRESS_MODE_CLAMP;
-        clampSamplerDesc.AddressV = D3D12_TEXTURE_ADDRESS_MODE_CLAMP;
-        clampSamplerDesc.AddressW = D3D12_TEXTURE_ADDRESS_MODE_CLAMP;
-        clampSamplerDesc.MipLODBias = 0.0f;
-        clampSamplerDesc.MaxAnisotropy = 1;
-        clampSamplerDesc.ComparisonFunc = D3D12_COMPARISON_FUNC_ALWAYS;
-        clampSamplerDesc.BorderColor[0] = clampSamplerDesc.BorderColor[1] = clampSamplerDesc.BorderColor[2] = clampSamplerDesc.BorderColor[3] = 0;
-        clampSamplerDesc.MinLOD = 0;
-        clampSamplerDesc.MaxLOD = D3D12_FLOAT32_MAX;
-        m_device->CreateSampler(&clampSamplerDesc, samplerHandle);
-    }
-
+void D3D12PostprocessBlur::CreateLights()
+{
     // Create lights.
     for (int i = 0; i < NumLights; i++)
     {
@@ -606,52 +604,57 @@ void D3D12PostprocessBlur::CreateSceneResources()
         XMVECTOR up = XMVectorSet(0.0f, 1.0f, 0.0f, 0.0f);
 
         m_lightCameras[i].Set(eye, at, up);
+    }    
+}
+
+void D3D12PostprocessBlur::CreateSyncFence()
+{
+    // Create synchronization objects and wait until assets have been uploaded to the GPU.
+    ThrowIfFailed(m_device->CreateFence(m_fenceValue, D3D12_FENCE_FLAG_NONE, IID_PPV_ARGS(&m_fence)));
+    m_fenceValue++;
+
+    // Create an event handle to use for frame synchronization.
+    m_fenceEvent = CreateEvent(nullptr, FALSE, FALSE, nullptr);
+    if (m_fenceEvent == nullptr)
+    {
+        ThrowIfFailed(HRESULT_FROM_WIN32(GetLastError()));
     }
+
+    // Wait for the command list to execute; we are reusing the same command 
+    // list in our main loop but for now, we just want to wait for setup to 
+    // complete before continuing.
+
+    // Signal and increment the fence value.
+    const UINT64 fenceToWaitFor = m_fenceValue;
+    ThrowIfFailed(m_commandQueue->Signal(m_fence.Get(), fenceToWaitFor));
+    m_fenceValue++;
+
+    // Wait until the fence is completed.
+    ThrowIfFailed(m_fence->SetEventOnCompletion(fenceToWaitFor, m_fenceEvent));
+    WaitForSingleObject(m_fenceEvent, INFINITE);
+}
+
+// Load the sample assets.
+void D3D12PostprocessBlur::CreateSceneResources()
+{
+    CreateDescriptorHeaps();
+    CreateSceneSignatures();
+    CreateScenePSOs();
+    CreateSamplers();
+    CreateSceneAssets();    
+    CreateLights();
 
     // Close the command list and use it to execute the initial GPU setup.
     ThrowIfFailed(m_commandList->Close());
     ID3D12CommandList* ppCommandLists[] = { m_commandList.Get() };
     m_commandQueue->ExecuteCommandLists(_countof(ppCommandLists), ppCommandLists);
-
-    // Create frame resources.
-    for (int i = 0; i < FrameCount; i++)
-    {
-        m_frameResources[i] = new FrameResource(this,
-            m_backBuffers[i].Get(), rtvBackBuffer[i],
-            i);
-        
-        m_frameResources[i]->WriteConstantBuffers(m_viewport, &m_camera,
-            m_lightCameras, m_lights, NumLights);
-    }
+    
+    CreateFrameResources();
     
     m_currentFrameResourceIndex = 0;
     m_pCurrentFrameResource = m_frameResources[m_currentFrameResourceIndex];
 
-    // Create synchronization objects and wait until assets have been uploaded to the GPU.
-    {
-        ThrowIfFailed(m_device->CreateFence(m_fenceValue, D3D12_FENCE_FLAG_NONE, IID_PPV_ARGS(&m_fence)));
-        m_fenceValue++;
-
-        // Create an event handle to use for frame synchronization.
-        m_fenceEvent = CreateEvent(nullptr, FALSE, FALSE, nullptr);
-        if (m_fenceEvent == nullptr)
-        {
-            ThrowIfFailed(HRESULT_FROM_WIN32(GetLastError()));
-        }
-
-        // Wait for the command list to execute; we are reusing the same command 
-        // list in our main loop but for now, we just want to wait for setup to 
-        // complete before continuing.
-
-        // Signal and increment the fence value.
-        const UINT64 fenceToWaitFor = m_fenceValue;
-        ThrowIfFailed(m_commandQueue->Signal(m_fence.Get(), fenceToWaitFor));
-        m_fenceValue++;
-
-        // Wait until the fence is completed.
-        ThrowIfFailed(m_fence->SetEventOnCompletion(fenceToWaitFor, m_fenceEvent));
-        WaitForSingleObject(m_fenceEvent, INFINITE);
-    }
+    CreateSyncFence();
 }
 
 // Update frame-based values.

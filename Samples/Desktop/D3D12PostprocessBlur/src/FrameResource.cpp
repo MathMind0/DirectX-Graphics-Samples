@@ -13,31 +13,11 @@
 #include "FrameResource.h"
 #include "SquidRoom.h"
 
-FrameResource::FrameResource(ID3D12Device* pDevice,
-    ID3D12Resource* pBackBuffer, const D3D12_CPU_DESCRIPTOR_HANDLE& rtvBackBuffer,
-    const D3D12_CPU_DESCRIPTOR_HANDLE& dsvDepthStencil,
-    ID3D12PipelineState* ppsoRenderScene, ID3D12PipelineState* ppsoRenderShadow,
-    ID3D12RootSignature* psigRenderScene, ID3D12RootSignature* psigRenderShadow,
-    ID3D12DescriptorHeap* pRtvHeap, ID3D12DescriptorHeap* pDsvHeap,
-    ID3D12DescriptorHeap* pCbvSrvHeap, ID3D12DescriptorHeap* pSamplerHeap,
-    const D3D12_VIEWPORT& viewport, const D3D12_RECT& scissorRect,
-    const D3D12_VERTEX_BUFFER_VIEW& vertexBufferView, const D3D12_INDEX_BUFFER_VIEW& indexBufferView,
-    UINT cbvSrvDescriptorSize, const D3D12_GPU_DESCRIPTOR_HANDLE& srvTextureStart,
-    UINT frameResourceIndex) :
-    m_backBuffer(pBackBuffer),
-    m_rtvBackBuffer(rtvBackBuffer),
-    m_dsvDepthStencil(dsvDepthStencil),
-    m_psoRenderScene(ppsoRenderScene),
-    m_psoRenderShadow(ppsoRenderShadow),
-    m_sigRenderScene(psigRenderScene),
-    m_sigRenderShadow(psigRenderShadow),
-    m_samplerHeap(pSamplerHeap),
-    m_viewport(viewport),
-    m_scissorRect(scissorRect),
-    m_vertexBufferView(vertexBufferView),
-    m_indexBufferView(indexBufferView),
-    m_cbvSrvDescriptorSize(cbvSrvDescriptorSize),
-    m_srvTextureStart(srvTextureStart),
+FrameResource::FrameResource(ID3D12Device* pDevice, ID3D12DescriptorHeap* pCbvSrvHeap,
+        ID3D12Resource* pBackBuffer, const D3D12_CPU_DESCRIPTOR_HANDLE& hBackBuffer,
+        UINT frameResourceIndex) :
+    backBuffer(pBackBuffer),
+    rtvBackBuffer(hBackBuffer),
     fenceValue(0)
 {
     ThrowIfFailed(pDevice->CreateCommandAllocator(D3D12_COMMAND_LIST_TYPE_DIRECT,

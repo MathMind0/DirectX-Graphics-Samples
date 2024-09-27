@@ -63,7 +63,7 @@ public:
     UINT64 fenceValue;
 
     ComPtr<ID3D12Resource> backBuffer;
-    D3D12_CPU_DESCRIPTOR_HANDLE rvtBackBuffer;
+    D3D12_CPU_DESCRIPTOR_HANDLE rtvBackBuffer;
 
     ComPtr<ID3D12Resource> cbShadow;
     ComPtr<ID3D12Resource> cbScene;
@@ -77,8 +77,8 @@ public:
     ScreenInfo* pScreenInfoData;
     
 public:
-    FrameResource(ID3D12Device* pDevice,
-        ID3D12DescriptorHeap* pCbvSrvHeap, 
+    FrameResource(ID3D12Device* pDevice, ID3D12DescriptorHeap* pCbvSrvHeap,
+        ID3D12Resource* pBackBuffer, const D3D12_CPU_DESCRIPTOR_HANDLE& hBackBuffer,
         UINT frameResourceIndex);
     
     ~FrameResource();
