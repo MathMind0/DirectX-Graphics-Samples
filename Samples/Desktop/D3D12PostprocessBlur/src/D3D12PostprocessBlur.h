@@ -26,6 +26,13 @@ using namespace DirectX;
 // An example of this can be found in the class method: OnDestroy().
 using Microsoft::WRL::ComPtr;
 
+enum class CSU_DESCRIPTORS : UINT
+{
+    SHADOW_SRV = 2 + _countof(SampleAssets::Textures),
+    SCREEN_COLOR_SRV,
+    NUM_DESCRIPTORS
+};
+
 class D3D12PostprocessBlur : public DXSample
 {
 public:

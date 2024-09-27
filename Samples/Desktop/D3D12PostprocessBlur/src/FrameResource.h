@@ -19,12 +19,10 @@
 using namespace DirectX;
 using namespace Microsoft::WRL;
 
-enum DESCRIPTORS
+enum class FRAME_CSU_DESCRIPTORS : UINT
 {
-    SHADOW_SRV,
     SHADOW_CBV,
     SCENE_CBV,
-    SCREEN_COLOR_SRV,
     NUM_DESCRIPTORS
 };
 
