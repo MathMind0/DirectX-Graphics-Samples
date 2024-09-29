@@ -153,7 +153,7 @@ void D3D12PostprocessBlur::CreateDescriptorHeaps()
 {
     // Describe and create a render target view (RTV) descriptor heap.
     D3D12_DESCRIPTOR_HEAP_DESC rtvHeapDesc = {};
-    rtvHeapDesc.NumDescriptors = FrameCount * 2; // One back buffer and one screen color buffer for each frame.
+    rtvHeapDesc.NumDescriptors = (UINT)RTV_DESCRIPTORS::NUM_DESCRIPTORS; 
     rtvHeapDesc.Type = D3D12_DESCRIPTOR_HEAP_TYPE_RTV;
     rtvHeapDesc.Flags = D3D12_DESCRIPTOR_HEAP_FLAG_NONE;
     ThrowIfFailed(m_device->CreateDescriptorHeap(&rtvHeapDesc, IID_PPV_ARGS(&m_rtvHeap)));
@@ -162,22 +162,16 @@ void D3D12PostprocessBlur::CreateDescriptorHeaps()
     // Each frame has its own depth stencils (to write shadows onto) 
     // and then there is one for the scene itself.
     D3D12_DESCRIPTOR_HEAP_DESC dsvHeapDesc = {};
-    dsvHeapDesc.NumDescriptors = 1 + FrameCount * 1; // One shadow buffer for each frame and single depth buffer.
+    dsvHeapDesc.NumDescriptors = (UINT)DSV_DESCRIPTORS::NUM_DESCRIPTORS; 
     dsvHeapDesc.Type = D3D12_DESCRIPTOR_HEAP_TYPE_DSV;
     dsvHeapDesc.Flags = D3D12_DESCRIPTOR_HEAP_FLAG_NONE;
     ThrowIfFailed(m_device->CreateDescriptorHeap(&dsvHeapDesc, IID_PPV_ARGS(&m_dsvHeap)));
 
     // Describe and create a shader resource view (SRV) and constant 
-    // buffer view (CBV) descriptor heap.  Heap layout: null views, 
-    // object diffuse + normal textures views, frame 1's shadow buffer, 
-    // frame 1's 2x constant buffer, frame 2's shadow buffer, frame 2's 
-    // 2x constant buffers, etc...
-    const UINT nullSrvCount = 2;        // Null descriptors are needed for out of bounds behavior reads.
-    const UINT cbvCount = FrameCount * 2; // The scene cbuffers of both shadow pass and scene pass for each frame.
-    // The shadow SRV and the scene color SRV for each frame.
-    const UINT srvCount = _countof(SampleAssets::Textures) + (FrameCount * 2); 
+    // buffer view (CBV) descriptor heap.  
     D3D12_DESCRIPTOR_HEAP_DESC cbvSrvHeapDesc = {};
-    cbvSrvHeapDesc.NumDescriptors = nullSrvCount + cbvCount + srvCount;
+    cbvSrvHeapDesc.NumDescriptors = (UINT)CSU_DESCRIPTORS::NUM_DESCRIPTORS +
+        (UINT)FRAME_CSU_DESCRIPTORS::NUM_DESCRIPTORS * FrameCount;
     cbvSrvHeapDesc.Type = D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV;
     cbvSrvHeapDesc.Flags = D3D12_DESCRIPTOR_HEAP_FLAG_SHADER_VISIBLE;
     ThrowIfFailed(m_device->CreateDescriptorHeap(&cbvSrvHeapDesc, IID_PPV_ARGS(&m_cbvSrvHeap)));
@@ -343,7 +337,9 @@ void D3D12PostprocessBlur::CreateSceneAssets()
     // Load scene assets.
     UINT fileSize = 0;
     UINT8* pAssetData;
-    ThrowIfFailed(ReadDataFromFile(GetAssetFullPath(SampleAssets::DataFileName).c_str(), &pAssetData, &fileSize));
+    ThrowIfFailed(ReadDataFromFile(
+        GetAssetFullPath(SampleAssets::DataFileName).c_str(),
+        &pAssetData, &fileSize));
 
     LoadAssetVertexBuffer(pAssetData);
     LoadAssetIndexBuffer(pAssetData);
@@ -472,7 +468,8 @@ void D3D12PostprocessBlur::LoadAssetTextures(const UINT8* pAssetData)
 
         // Create each texture and SRV descriptor.
         const UINT srvCount = _countof(SampleAssets::Textures);
-        PIXBeginEvent(m_commandList.Get(), 0, L"Copy diffuse and normal texture data to default resources...");
+        PIXBeginEvent(m_commandList.Get(), 0,
+            L"Copy diffuse and normal texture data to default resources...");
         for (UINT i = 0; i < srvCount; i++)
         {
             // Describe and create a Texture2D.
@@ -565,7 +562,8 @@ void D3D12PostprocessBlur::CreateSamplers()
     wrapSamplerDesc.MipLODBias = 0.0f;
     wrapSamplerDesc.MaxAnisotropy = 1;
     wrapSamplerDesc.ComparisonFunc = D3D12_COMPARISON_FUNC_ALWAYS;
-    wrapSamplerDesc.BorderColor[0] = wrapSamplerDesc.BorderColor[1] = wrapSamplerDesc.BorderColor[2] = wrapSamplerDesc.BorderColor[3] = 0;
+    wrapSamplerDesc.BorderColor[0] = wrapSamplerDesc.BorderColor[1] =
+        wrapSamplerDesc.BorderColor[2] = wrapSamplerDesc.BorderColor[3] = 0;
     m_device->CreateSampler(&wrapSamplerDesc, samplerHandle);
 
     // Move the handle to the next slot in the descriptor heap.
@@ -581,7 +579,8 @@ void D3D12PostprocessBlur::CreateSamplers()
     clampSamplerDesc.MipLODBias = 0.0f;
     clampSamplerDesc.MaxAnisotropy = 1;
     clampSamplerDesc.ComparisonFunc = D3D12_COMPARISON_FUNC_ALWAYS;
-    clampSamplerDesc.BorderColor[0] = clampSamplerDesc.BorderColor[1] = clampSamplerDesc.BorderColor[2] = clampSamplerDesc.BorderColor[3] = 0;
+    clampSamplerDesc.BorderColor[0] = clampSamplerDesc.BorderColor[1] =
+        clampSamplerDesc.BorderColor[2] = clampSamplerDesc.BorderColor[3] = 0;
     clampSamplerDesc.MinLOD = 0;
     clampSamplerDesc.MaxLOD = D3D12_FLOAT32_MAX;
     m_device->CreateSampler(&clampSamplerDesc, samplerHandle);
@@ -668,7 +667,7 @@ void D3D12PostprocessBlur::CreateShadowResources()
     // Get a handle to the start of the descriptor heap then offset 
     // it based on the frame resource index.
     CD3DX12_CPU_DESCRIPTOR_HANDLE depthHandle(m_dsvHeap->GetCPUDescriptorHandleForHeapStart(),
-        1, m_dsvDescriptorSize); // + 1 for the shadow map.
+        (INT)DSV_DESCRIPTORS::SHADOW_DSV, m_dsvDescriptorSize); // + 1 for the shadow map.
 
     // Describe and create the shadow depth view and cache the CPU 
     // descriptor handle.
@@ -678,35 +677,73 @@ void D3D12PostprocessBlur::CreateShadowResources()
     depthStencilViewDesc.Texture2D.MipSlice = 0;
     m_device->CreateDepthStencilView(m_shadowTexture.Get(), &depthStencilViewDesc, depthHandle);
     m_shadowDepthView = depthHandle;
-
-    // Get a handle to the start of the descriptor heap then offset it 
-    // based on the existing textures and the frame resource index. Each 
-    // frame has 1 SRV (shadow tex) and 2 CBVs.
-    const UINT nullSrvCount = 2;   // Null descriptors at the start of the heap.
-    // Diffuse + normal textures near the start of the heap.
-    // Ideally, track descriptor heap contents/offsets at a higher level.
-    const UINT textureCount = _countof(SampleAssets::Textures);    
-    const UINT cbvSrvDescriptorSize = pDevice->GetDescriptorHandleIncrementSize(D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV);
-    CD3DX12_CPU_DESCRIPTOR_HANDLE cbvSrvCpuHandle(pCbvSrvHeap->GetCPUDescriptorHandleForHeapStart());
-    CD3DX12_GPU_DESCRIPTOR_HANDLE cbvSrvGpuHandle(pCbvSrvHeap->GetGPUDescriptorHandleForHeapStart());
-    m_nullSrvHandle = cbvSrvGpuHandle;
-    cbvSrvCpuHandle.Offset(nullSrvCount + textureCount + (frameResourceIndex * NUM_DESCRIPTORS), cbvSrvDescriptorSize);
-    cbvSrvGpuHandle.Offset(nullSrvCount + textureCount + (frameResourceIndex * NUM_DESCRIPTORS), cbvSrvDescriptorSize);
-
+    
     // Describe and create a shader resource view (SRV) for the shadow depth 
     // texture and cache the GPU descriptor handle. This SRV is for sampling 
     // the shadow map from our shader. It uses the same texture that we use 
     // as a depth-stencil during the shadow pass.
+    CD3DX12_CPU_DESCRIPTOR_HANDLE srvShadowCPU(m_dsvHeap->GetCPUDescriptorHandleForHeapStart(),
+        (INT)CSU_DESCRIPTORS::SHADOW_SRV, m_defaultDescriptorSize);
+    CD3DX12_GPU_DESCRIPTOR_HANDLE srvShadowGPU(m_dsvHeap->GetGPUDescriptorHandleForHeapStart(),
+        (INT)CSU_DESCRIPTORS::SHADOW_SRV, m_defaultDescriptorSize);
+    
     D3D12_SHADER_RESOURCE_VIEW_DESC shadowSrvDesc = {};
     shadowSrvDesc.Format = DXGI_FORMAT_R32_FLOAT;
     shadowSrvDesc.ViewDimension = D3D12_SRV_DIMENSION_TEXTURE2D;
     shadowSrvDesc.Texture2D.MipLevels = 1;
     shadowSrvDesc.Shader4ComponentMapping = D3D12_DEFAULT_SHADER_4_COMPONENT_MAPPING;
-    pDevice->CreateShaderResourceView(m_shadowTexture.Get(), &shadowSrvDesc, cbvSrvCpuHandle);
-    m_shadowDepthHandle = cbvSrvGpuHandle;
-
+    m_device->CreateShaderResourceView(m_shadowTexture.Get(), &shadowSrvDesc, srvShadowCPU);
+    m_shadowDepthHandle = srvShadowGPU;
 }
 
+void D3D12PostprocessBlur::CreatePostprocessResources()
+{
+    // Resource initialization for postprocess.
+    CD3DX12_RESOURCE_DESC descSceneColor = CD3DX12_RESOURCE_DESC::Tex2D(
+        DXGI_FORMAT_R8G8B8A8_UNORM,
+        static_cast<UINT>(m_viewport.Width),
+        static_cast<UINT>(m_viewport.Height),
+        1, 1, 1, 0,
+        D3D12_RESOURCE_FLAG_ALLOW_RENDER_TARGET);
+
+    FLOAT clearColor[] = {0.f, 0.f, 0.f, 0.f};
+    CD3DX12_CLEAR_VALUE clearSceneColor(DXGI_FORMAT_R8G8B8A8_UNORM,
+        clearColor);
+        
+    ThrowIfFailed(m_device->CreateCommittedResource(
+        &CD3DX12_HEAP_PROPERTIES(D3D12_HEAP_TYPE_DEFAULT),
+        D3D12_HEAP_FLAG_NONE,
+        &descSceneColor,
+        D3D12_RESOURCE_STATE_RENDER_TARGET,
+        &clearSceneColor,
+        IID_PPV_ARGS(&m_texSceneColor)));
+
+    NAME_D3D12_OBJECT(m_texSceneColor);
+
+    m_srvSceneColorCpu = CD3DX12_CPU_DESCRIPTOR_HANDLE(m_dsvHeap->GetCPUDescriptorHandleForHeapStart(),
+    (INT)CSU_DESCRIPTORS::SCREEN_COLOR_SRV, m_defaultDescriptorSize);
+    m_srvSceneColorGpu = CD3DX12_GPU_DESCRIPTOR_HANDLE(m_dsvHeap->GetGPUDescriptorHandleForHeapStart(),
+        (INT)CSU_DESCRIPTORS::SCREEN_COLOR_SRV, m_defaultDescriptorSize);
+    
+    D3D12_SHADER_RESOURCE_VIEW_DESC srvSceneColorDesc = {};
+    srvSceneColorDesc.Format = DXGI_FORMAT_UNKNOWN;
+    srvSceneColorDesc.ViewDimension = D3D12_SRV_DIMENSION_TEXTURE2D;
+    srvSceneColorDesc.Shader4ComponentMapping = D3D12_DEFAULT_SHADER_4_COMPONENT_MAPPING;
+    srvSceneColorDesc.Texture2D.MipLevels = 1;
+
+    m_device->CreateShaderResourceView(m_texSceneColor.Get(), &srvSceneColorDesc, m_srvSceneColorCpu);
+    
+    m_rtvSceneColorCpu = CD3DX12_CPU_DESCRIPTOR_HANDLE(m_rtvHeap->GetCPUDescriptorHandleForHeapStart(),
+        (INT)RTV_DESCRIPTORS::SCREEN_COLOR_RTV, m_rtvDescriptorSize);
+    m_rtvSceneColorGpu = CD3DX12_GPU_DESCRIPTOR_HANDLE(m_rtvHeap->GetGPUDescriptorHandleForHeapStart(),
+        (INT)RTV_DESCRIPTORS::SCREEN_COLOR_RTV, m_rtvDescriptorSize);
+
+    D3D12_RENDER_TARGET_VIEW_DESC rtvDesc = {};
+    rtvDesc.Format = DXGI_FORMAT_UNKNOWN;
+    rtvDesc.ViewDimension = D3D12_RTV_DIMENSION_TEXTURE2D;
+    rtvDesc.Texture2D.MipSlice = 0;
+    m_device->CreateRenderTargetView(m_texSceneColor.Get(), &rtvDesc, m_rtvSceneColorCpu);
+}
 
 // Load the sample assets.
 void D3D12PostprocessBlur::CreateSceneResources()
@@ -717,6 +754,7 @@ void D3D12PostprocessBlur::CreateSceneResources()
     CreateSamplers();
     CreateSceneAssets();    
     CreateLights();
+    CreatePostprocessResources();
 
     // Close the command list and use it to execute the initial GPU setup.
     ThrowIfFailed(m_commandList->Close());

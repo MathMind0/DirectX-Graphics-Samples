@@ -33,6 +33,19 @@ enum class CSU_DESCRIPTORS : UINT
     NUM_DESCRIPTORS
 };
 
+enum class RTV_DESCRIPTORS : UINT
+{
+    SCREEN_COLOR_RTV = FrameCount,
+    NUM_DESCRIPTORS
+};
+
+enum class DSV_DESCRIPTORS : UINT
+{
+    DEFAULT_DSV,
+    SHADOW_DSV,
+    NUM_DESCRIPTORS
+};
+
 class D3D12PostprocessBlur : public DXSample
 {
 public:

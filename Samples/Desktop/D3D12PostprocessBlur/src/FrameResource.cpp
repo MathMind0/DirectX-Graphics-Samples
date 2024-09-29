@@ -13,9 +13,10 @@
 #include "FrameResource.h"
 #include "SquidRoom.h"
 
-FrameResource::FrameResource(ID3D12Device* pDevice, ID3D12DescriptorHeap* pCbvSrvHeap,
-        ID3D12Resource* pBackBuffer, const D3D12_CPU_DESCRIPTOR_HANDLE& hBackBuffer,
-        UINT frameResourceIndex) :
+FrameResource::FrameResource(ID3D12Device* pDevice,
+    ID3D12DescriptorHeap* pCbvSrvHeap, UINT cbvSrvDescriptorSize,
+    ID3D12Resource* pBackBuffer, const D3D12_CPU_DESCRIPTOR_HANDLE& hBackBuffer,
+    UINT frameResourceIndex) :
     backBuffer(pBackBuffer),
     rtvBackBuffer(hBackBuffer),
     fenceValue(0)
@@ -31,11 +32,6 @@ FrameResource::FrameResource(ID3D12Device* pDevice, ID3D12DescriptorHeap* pCbvSr
 
     // Close these command lists; don't record into them for now.
     ThrowIfFailed(commandList->Close());
-
-
-    // Increment the descriptor handles.
-    cbvSrvCpuHandle.Offset(cbvSrvDescriptorSize);
-    cbvSrvGpuHandle.Offset(cbvSrvDescriptorSize);
 
     // Create the constant buffers.
     const UINT constantBufferSize =
@@ -67,73 +63,42 @@ FrameResource::FrameResource(ID3D12Device* pDevice, ID3D12DescriptorHeap* pCbvSr
 
     // Create the constant buffer views: one for the shadow pass and
     // another for the scene pass.
+    CD3DX12_CPU_DESCRIPTOR_HANDLE cpuHandleShadowCB(
+        pCbvSrvHeap->GetCPUDescriptorHandleForHeapStart(),
+        (INT)FRAME_CSU_DESCRIPTORS::NUM_DESCRIPTORS * frameResourceIndex +
+        (INT)FRAME_CSU_DESCRIPTORS::SHADOW_CBV,
+        cbvSrvDescriptorSize);
+    CD3DX12_GPU_DESCRIPTOR_HANDLE gpuHandleShadowCB(
+        pCbvSrvHeap->GetGPUDescriptorHandleForHeapStart(),
+        (INT)FRAME_CSU_DESCRIPTORS::NUM_DESCRIPTORS * frameResourceIndex +
+        (INT)FRAME_CSU_DESCRIPTORS::SHADOW_CBV,
+        cbvSrvDescriptorSize);
+    
     D3D12_CONSTANT_BUFFER_VIEW_DESC cbvDesc = {};
     cbvDesc.SizeInBytes = constantBufferSize;
 
     // Describe and create the shadow constant buffer view (CBV) and 
     // cache the GPU descriptor handle.
     cbvDesc.BufferLocation = cbShadow->GetGPUVirtualAddress();
-    pDevice->CreateConstantBufferView(&cbvDesc, cbvSrvCpuHandle);
-    cbvShadow = cbvSrvGpuHandle;
+    pDevice->CreateConstantBufferView(&cbvDesc, cpuHandleShadowCB);
+    cbvShadow = gpuHandleShadowCB;
 
-    // Increment the descriptor handles.
-    cbvSrvCpuHandle.Offset(cbvSrvDescriptorSize);
-    cbvSrvGpuHandle.Offset(cbvSrvDescriptorSize);
-
+    CD3DX12_CPU_DESCRIPTOR_HANDLE cpuHandleSceneCB(
+    pCbvSrvHeap->GetCPUDescriptorHandleForHeapStart(),
+    (INT)FRAME_CSU_DESCRIPTORS::NUM_DESCRIPTORS * frameResourceIndex +
+    (INT)FRAME_CSU_DESCRIPTORS::SCENE_CBV,
+    cbvSrvDescriptorSize);
+    CD3DX12_GPU_DESCRIPTOR_HANDLE gpuHandleSceneCB(
+        pCbvSrvHeap->GetGPUDescriptorHandleForHeapStart(),
+        (INT)FRAME_CSU_DESCRIPTORS::NUM_DESCRIPTORS * frameResourceIndex +
+        (INT)FRAME_CSU_DESCRIPTORS::SCENE_CBV,
+        cbvSrvDescriptorSize);
+    
     // Describe and create the scene constant buffer view (CBV) and 
     // cache the GPU descriptor handle.
     cbvDesc.BufferLocation = cbScene->GetGPUVirtualAddress();
-    pDevice->CreateConstantBufferView(&cbvDesc, cbvSrvCpuHandle);
-    cbvScene = cbvSrvGpuHandle;
-
-    // Increment the descriptor handles.
-    cbvSrvCpuHandle.Offset(cbvSrvDescriptorSize);
-    cbvSrvGpuHandle.Offset(cbvSrvDescriptorSize);
-
-    // Resource initialization for postprocess.
-    CD3DX12_RESOURCE_DESC descSceneColor = CD3DX12_RESOURCE_DESC::Tex2D(
-        DXGI_FORMAT_R8G8B8A8_UNORM,
-        static_cast<UINT>(viewport.Width),
-        static_cast<UINT>(viewport.Height),
-        1, 1, 1, 0,
-        D3D12_RESOURCE_FLAG_ALLOW_RENDER_TARGET);
-
-    FLOAT clearColor[] = {0.f, 0.f, 0.f, 0.f};
-    CD3DX12_CLEAR_VALUE clearSceneColor(DXGI_FORMAT_R8G8B8A8_UNORM,
-        clearColor);
-        
-    ThrowIfFailed(pDevice->CreateCommittedResource(
-        &CD3DX12_HEAP_PROPERTIES(D3D12_HEAP_TYPE_DEFAULT),
-        D3D12_HEAP_FLAG_NONE,
-        &descSceneColor,
-        D3D12_RESOURCE_STATE_RENDER_TARGET,
-        &clearSceneColor,
-        IID_PPV_ARGS(&m_texSceneColor)));
-
-    NAME_D3D12_OBJECT(m_texSceneColor);
-
-    m_srvSceneColorCpu = cbvSrvCpuHandle;
-    m_srvSceneColorGpu = cbvSrvGpuHandle;
-
-    D3D12_SHADER_RESOURCE_VIEW_DESC srvSceneColorDesc = {};
-    srvSceneColorDesc.Format = DXGI_FORMAT_UNKNOWN;
-    srvSceneColorDesc.ViewDimension = D3D12_SRV_DIMENSION_TEXTURE2D;
-    srvSceneColorDesc.Shader4ComponentMapping = D3D12_DEFAULT_SHADER_4_COMPONENT_MAPPING;
-    srvSceneColorDesc.Texture2D.MipLevels = 1;
-
-    pDevice->CreateShaderResourceView(m_texSceneColor.Get(), &srvSceneColorDesc, m_srvSceneColorCpu);
-
-    const UINT rtvDescriptorSize = pDevice->GetDescriptorHandleIncrementSize(D3D12_DESCRIPTOR_HEAP_TYPE_RTV);
-    m_rtvSceneColorCpu = CD3DX12_CPU_DESCRIPTOR_HANDLE(pRtvHeap->GetCPUDescriptorHandleForHeapStart(),
-        FrameCount + frameResourceIndex, rtvDescriptorSize);
-    m_rtvSceneColorGpu = CD3DX12_GPU_DESCRIPTOR_HANDLE(pRtvHeap->GetGPUDescriptorHandleForHeapStart(),
-        FrameCount + frameResourceIndex, rtvDescriptorSize);
-
-    D3D12_RENDER_TARGET_VIEW_DESC rtvDesc = {};
-    rtvDesc.Format = DXGI_FORMAT_UNKNOWN;
-    rtvDesc.ViewDimension = D3D12_RTV_DIMENSION_TEXTURE2D;
-    rtvDesc.Texture2D.MipSlice = 0;
-    pDevice->CreateRenderTargetView(m_texSceneColor.Get(), &rtvDesc, m_rtvSceneColorCpu);
+    pDevice->CreateConstantBufferView(&cbvDesc, cpuHandleSceneCB);
+    cbvScene = gpuHandleSceneCB;
     
     const UINT szScreenInfoCB = (sizeof(ScreenInfo) + D3D12_CONSTANT_BUFFER_DATA_PLACEMENT_ALIGNMENT - 1) &
         ~(D3D12_CONSTANT_BUFFER_DATA_PLACEMENT_ALIGNMENT - 1);
