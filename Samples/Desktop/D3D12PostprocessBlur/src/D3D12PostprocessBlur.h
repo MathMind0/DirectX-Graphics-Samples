@@ -165,7 +165,11 @@ private:
     void RestoreD3DResources();
     void ReleaseD3DResources();
     void WaitForGpu();
+    
     void BeginFrame();
-    void MidFrame();
+    void RenderShadow();
+    void RenderScene();
+    void RenderPostprocess();
     void EndFrame();
+    
 };

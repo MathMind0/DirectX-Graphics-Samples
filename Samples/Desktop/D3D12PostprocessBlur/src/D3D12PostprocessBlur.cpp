@@ -836,16 +836,20 @@ void D3D12PostprocessBlur::OnRender()
 {
     try
     {
+        ID3D12GraphicsCommandList* commandList = m_pCurrentFrameResource->commandList.Get();
+        PIXBeginEvent(commandList, 0, L"Rendering frame begin ...");
+        
         BeginFrame();
-
-        for (int i = 0; i < NumContexts; i++)
-        {
-            WorkerThread(i);
-        }
-        MidFrame();
+        RenderShadow();
+        RenderScene();
+        RenderPostprocess();
         EndFrame();
-        m_commandQueue->ExecuteCommandLists(_countof(m_pCurrentFrameResource->m_batchSubmit), m_pCurrentFrameResource->m_batchSubmit);
+        
+        ID3D12CommandList* commandLists[] = { commandList };
+        m_commandQueue->ExecuteCommandLists(1, commandLists);
 
+        PIXEndEvent(commandList);
+        
         m_cpuTimer.Tick(NULL);
         if (m_titleCount == TitleThrottle)
         {
@@ -887,117 +891,26 @@ void D3D12PostprocessBlur::OnRender()
     }
 }
 
-// Release sample's D3D objects.
-void D3D12PostprocessBlur::ReleaseD3DResources()
-{
-    m_fence.Reset();
-    ResetComPtrArray(&m_backBuffers);
-    m_commandQueue.Reset();
-    m_swapChain.Reset();
-    m_device.Reset();
-}
-
-// Tears down D3D resources and reinitializes them.
-void D3D12PostprocessBlur::RestoreD3DResources()
-{
-    // Give GPU a chance to finish its execution in progress.
-    try
-    {
-        WaitForGpu();
-    }
-    catch (HrException&)
-    {
-        // Do nothing, currently attached adapter is unresponsive.
-    }
-    ReleaseD3DResources();
-    OnInit();
-}
-
-// Wait for pending GPU work to complete.
-void D3D12PostprocessBlur::WaitForGpu()
-{
-    // Schedule a Signal command in the queue.
-    ThrowIfFailed(m_commandQueue->Signal(m_fence.Get(), m_fenceValue));
-
-    // Wait until the fence has been processed.
-    ThrowIfFailed(m_fence->SetEventOnCompletion(m_fenceValue, m_fenceEvent));
-    WaitForSingleObjectEx(m_fenceEvent, INFINITE, FALSE);
-}
-
-void D3D12PostprocessBlur::OnDestroy()
-{
-    // Ensure that the GPU is no longer referencing resources that are about to be
-    // cleaned up by the destructor.
-    {
-        const UINT64 fence = m_fenceValue;
-        const UINT64 lastCompletedFence = m_fence->GetCompletedValue();
-
-        // Signal and increment the fence value.
-        ThrowIfFailed(m_commandQueue->Signal(m_fence.Get(), m_fenceValue));
-        m_fenceValue++;
-
-        // Wait until the previous frame is finished.
-        if (lastCompletedFence < fence)
-        {
-            ThrowIfFailed(m_fence->SetEventOnCompletion(fence, m_fenceEvent));
-            WaitForSingleObject(m_fenceEvent, INFINITE);
-        }
-        CloseHandle(m_fenceEvent);
-    }
-
-    for (int i = 0; i < _countof(m_frameResources); i++)
-    {
-        delete m_frameResources[i];
-    }
-}
-
-void D3D12PostprocessBlur::OnKeyDown(UINT8 key)
-{
-    switch (key)
-    {
-    case VK_LEFT:
-        m_keyboardInput.leftArrowPressed = true;
-        break;
-    case VK_RIGHT:
-        m_keyboardInput.rightArrowPressed = true;
-        break;
-    case VK_UP:
-        m_keyboardInput.upArrowPressed = true;
-        break;
-    case VK_DOWN:
-        m_keyboardInput.downArrowPressed = true;
-        break;
-    case VK_SPACE:
-        m_keyboardInput.animate = !m_keyboardInput.animate;
-        break;
-    }
-}
-
-void D3D12PostprocessBlur::OnKeyUp(UINT8 key)
-{
-    switch (key)
-    {
-    case VK_LEFT:
-        m_keyboardInput.leftArrowPressed = false;
-        break;
-    case VK_RIGHT:
-        m_keyboardInput.rightArrowPressed = false;
-        break;
-    case VK_UP:
-        m_keyboardInput.upArrowPressed = false;
-        break;
-    case VK_DOWN:
-        m_keyboardInput.downArrowPressed = false;
-        break;
-    }
-}
-
 // Assemble the CommandListPre command list.
 void D3D12PostprocessBlur::BeginFrame()
-{
-    m_pCurrentFrameResource->Init();
+{    
+    // Reset the command allocator and list.
+    ThrowIfFailed(m_frameResources[m_currentFrameResourceIndex]->commandAllocator->Reset());
+    ID3D12GraphicsCommandList* commandList = m_frameResources[m_currentFrameResourceIndex]->commandList.Get();
+    ThrowIfFailed(commandList->Reset());
+        
+    ID3D12DescriptorHeap* ppHeaps[] = { m_cbvSrvHeap.Get(), m_samplerHeap.Get() };
+    commandList->SetDescriptorHeaps(_countof(ppHeaps), ppHeaps);
 
+    // Indicate that the back buffer will be used as a render target.
+    commandList->ResourceBarrier(1, &CD3DX12_RESOURCE_BARRIER::Transition(
+        m_backBuffers[m_frameIndex].Get(), D3D12_RESOURCE_STATE_PRESENT, D3D12_RESOURCE_STATE_RENDER_TARGET));
 
+    // Clear the render target and depth stencil.
+    const float clearColor[] = { 0.0f, 0.0f, 0.0f, 1.0f };
+    CD3DX12_CPU_DESCRIPTOR_HANDLE rtvHandle(m_rtvHeap->GetCPUDescriptorHandleForHeapStart(), m_frameIndex, m_rtvDescriptorSize);
+    m_pCurrentFrameResource->m_commandLists[CommandListPre]->ClearRenderTargetView(rtvHandle, clearColor, 0, nullptr);
+    m_pCurrentFrameResource->m_commandLists[CommandListPre]->ClearDepthStencilView(m_dsvHeap->GetCPUDescriptorHandleForHeapStart(), D3D12_CLEAR_FLAG_DEPTH, 1.0f, 0, 0, nullptr);
 
 }
 
@@ -1131,4 +1044,109 @@ void D3D12PostprocessBlur::SetCommonPipelineState(ID3D12GraphicsCommandList* pCo
 
     // SRVs are set elsewhere because they change based on the object 
     // being drawn.
+}
+
+// Release sample's D3D objects.
+void D3D12PostprocessBlur::ReleaseD3DResources()
+{
+    m_fence.Reset();
+    ResetComPtrArray(&m_backBuffers);
+    m_commandQueue.Reset();
+    m_swapChain.Reset();
+    m_device.Reset();
+}
+
+// Tears down D3D resources and reinitializes them.
+void D3D12PostprocessBlur::RestoreD3DResources()
+{
+    // Give GPU a chance to finish its execution in progress.
+    try
+    {
+        WaitForGpu();
+    }
+    catch (HrException&)
+    {
+        // Do nothing, currently attached adapter is unresponsive.
+    }
+    ReleaseD3DResources();
+    OnInit();
+}
+
+// Wait for pending GPU work to complete.
+void D3D12PostprocessBlur::WaitForGpu()
+{
+    // Schedule a Signal command in the queue.
+    ThrowIfFailed(m_commandQueue->Signal(m_fence.Get(), m_fenceValue));
+
+    // Wait until the fence has been processed.
+    ThrowIfFailed(m_fence->SetEventOnCompletion(m_fenceValue, m_fenceEvent));
+    WaitForSingleObjectEx(m_fenceEvent, INFINITE, FALSE);
+}
+
+void D3D12PostprocessBlur::OnDestroy()
+{
+    // Ensure that the GPU is no longer referencing resources that are about to be
+    // cleaned up by the destructor.
+    {
+        const UINT64 fence = m_fenceValue;
+        const UINT64 lastCompletedFence = m_fence->GetCompletedValue();
+
+        // Signal and increment the fence value.
+        ThrowIfFailed(m_commandQueue->Signal(m_fence.Get(), m_fenceValue));
+        m_fenceValue++;
+
+        // Wait until the previous frame is finished.
+        if (lastCompletedFence < fence)
+        {
+            ThrowIfFailed(m_fence->SetEventOnCompletion(fence, m_fenceEvent));
+            WaitForSingleObject(m_fenceEvent, INFINITE);
+        }
+        CloseHandle(m_fenceEvent);
+    }
+
+    for (int i = 0; i < _countof(m_frameResources); i++)
+    {
+        delete m_frameResources[i];
+    }
+}
+
+void D3D12PostprocessBlur::OnKeyDown(UINT8 key)
+{
+    switch (key)
+    {
+    case VK_LEFT:
+        m_keyboardInput.leftArrowPressed = true;
+        break;
+    case VK_RIGHT:
+        m_keyboardInput.rightArrowPressed = true;
+        break;
+    case VK_UP:
+        m_keyboardInput.upArrowPressed = true;
+        break;
+    case VK_DOWN:
+        m_keyboardInput.downArrowPressed = true;
+        break;
+    case VK_SPACE:
+        m_keyboardInput.animate = !m_keyboardInput.animate;
+        break;
+    }
+}
+
+void D3D12PostprocessBlur::OnKeyUp(UINT8 key)
+{
+    switch (key)
+    {
+    case VK_LEFT:
+        m_keyboardInput.leftArrowPressed = false;
+        break;
+    case VK_RIGHT:
+        m_keyboardInput.rightArrowPressed = false;
+        break;
+    case VK_UP:
+        m_keyboardInput.upArrowPressed = false;
+        break;
+    case VK_DOWN:
+        m_keyboardInput.downArrowPressed = false;
+        break;
+    }
 }

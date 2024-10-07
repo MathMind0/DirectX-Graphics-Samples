@@ -12,6 +12,7 @@
 #include "stdafx.h"
 #include "FrameResource.h"
 #include "SquidRoom.h"
+#include <cmath>
 
 FrameResource::FrameResource(ID3D12Device* pDevice,
     ID3D12DescriptorHeap* pCbvSrvHeap, UINT cbvSrvDescriptorSize,
@@ -126,8 +127,6 @@ FrameResource::~FrameResource()
 void FrameResource::WriteConstantBuffers(const D3D12_VIEWPORT& viewport, Camera* pSceneCamera,
                                          Camera* lightCams, LightState* lights, int NumLights)
 {
-    m_viewport = viewport;
-    
     SceneConstantBuffer sceneConsts = {}; 
     SceneConstantBuffer shadowConsts = {};
     
@@ -176,21 +175,6 @@ void FrameResource::RenderFrame()
 
 void FrameResource::FrameBegin()
 {
-    // Reset the command allocator and list.
-    ThrowIfFailed(commandAllocator->Reset());
-    ThrowIfFailed(commandList.Reset());
-        
-    ID3D12DescriptorHeap* ppHeaps[] = { m_root->m_cbvSrvHeap.Get(), m_samplerHeap.Get() };
-    commandList->SetDescriptorHeaps(_countof(ppHeaps), ppHeaps);
-
-    // Indicate that the back buffer will be used as a render target.
-    m_pCurrentFrameResource->m_commandLists[CommandListPre]->ResourceBarrier(1, &CD3DX12_RESOURCE_BARRIER::Transition(m_backBuffers[m_frameIndex].Get(), D3D12_RESOURCE_STATE_PRESENT, D3D12_RESOURCE_STATE_RENDER_TARGET));
-
-    // Clear the render target and depth stencil.
-    const float clearColor[] = { 0.0f, 0.0f, 0.0f, 1.0f };
-    CD3DX12_CPU_DESCRIPTOR_HANDLE rtvHandle(m_rtvHeap->GetCPUDescriptorHandleForHeapStart(), m_frameIndex, m_rtvDescriptorSize);
-    m_pCurrentFrameResource->m_commandLists[CommandListPre]->ClearRenderTargetView(rtvHandle, clearColor, 0, nullptr);
-    m_pCurrentFrameResource->m_commandLists[CommandListPre]->ClearDepthStencilView(m_dsvHeap->GetCPUDescriptorHandleForHeapStart(), D3D12_CLEAR_FLAG_DEPTH, 1.0f, 0, 0, nullptr);
 }
 
 void FrameResource::RenderShadow()
