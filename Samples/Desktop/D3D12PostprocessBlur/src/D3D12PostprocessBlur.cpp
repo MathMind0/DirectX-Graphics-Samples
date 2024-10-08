@@ -310,6 +310,26 @@ void D3D12PostprocessBlur::CreateScenePSOs()
 
     ThrowIfFailed(m_device->CreateGraphicsPipelineState(&psoDesc, IID_PPV_ARGS(&m_psoRenderShadow)));
     NAME_D3D12_OBJECT(m_psoRenderShadow);
+
+    ThrowIfFailed(D3DCompileFromFile(GetAssetFullPath(L"Postprocess.hlsl").c_str(), nullptr, nullptr,
+        "VSPostprocess", "vs_5_0", m_compileFlags, 0,
+        &vertexShader, nullptr));
+    
+    ThrowIfFailed(D3DCompileFromFile(GetAssetFullPath(L"Postprocess.hlsl").c_str(), nullptr, nullptr,
+        "PSPostprocessBlurNaive", "ps_5_0", m_compileFlags, 0,
+        &vertexShader, nullptr));
+
+    psoDesc.InputLayout.pInputElementDescs = nullptr; psoDesc.InputLayout.NumElements = 0;
+    psoDesc.pRootSignature = m_sigRenderScene.Get();
+    psoDesc.VS = CD3DX12_SHADER_BYTECODE(vertexShader.Get());
+    psoDesc.PS = CD3DX12_SHADER_BYTECODE(pixelShader.Get());
+    psoDesc.RasterizerState = CD3DX12_RASTERIZER_DESC(D3D12_DEFAULT);
+    psoDesc.BlendState = CD3DX12_BLEND_DESC(D3D12_DEFAULT);
+    psoDesc.DepthStencilState = CD3DX12_DEPTH_STENCIL_DESC(D3D12_DEFAULT);
+    psoDesc.DepthStencilState.DepthEnable = false;
+    psoDesc.SampleMask = UINT_MAX;
+    
+    
 }
 
 void D3D12PostprocessBlur::CreateDepthBuffer()
