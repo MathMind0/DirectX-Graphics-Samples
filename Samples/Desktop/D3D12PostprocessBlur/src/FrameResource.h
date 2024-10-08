@@ -84,12 +84,5 @@ public:
     void WriteConstantBuffers(const D3D12_VIEWPORT& viewport, Camera* pSceneCamera,
                               Camera* lightCams, LightState* lights, int NumLights);
 
-    void RenderFrame();
-
 private:
-    void FrameBegin();
-    void RenderShadow();
-    void RenderScene();
-    void RenderPostprocess();
-    void FrameEnd();
 };

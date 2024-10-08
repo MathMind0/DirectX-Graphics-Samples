@@ -76,7 +76,8 @@ private:
     CD3DX12_RECT m_scissorRect;
     ComPtr<IDXGISwapChain3> m_swapChain;
     ComPtr<ID3D12Device> m_device;
-    ComPtr<ID3D12Resource> m_depthStencil;    
+    ComPtr<ID3D12Resource> m_depthStencil;
+    D3D12_CPU_DESCRIPTOR_HANDLE m_dsvDepthStencil;
     ComPtr<ID3D12CommandQueue> m_commandQueue;
     ComPtr<ID3D12CommandAllocator> m_commandAllocator;
     ComPtr<ID3D12GraphicsCommandList> m_commandList;
@@ -118,6 +119,8 @@ private:
     D3D12_CPU_DESCRIPTOR_HANDLE m_rtvSceneColorCpu;
     D3D12_GPU_DESCRIPTOR_HANDLE m_srvSceneColorGpu;
     D3D12_CPU_DESCRIPTOR_HANDLE m_srvSceneColorCpu;
+    ComPtr<ID3D12RootSignature> m_sigBlur;
+    ComPtr<ID3D12PipelineState> m_psoBlur;
 
     // App data
     InputState m_keyboardInput;

@@ -118,8 +118,6 @@ FrameResource::FrameResource(ID3D12Device* pDevice,
 
 FrameResource::~FrameResource()
 {
-    m_shadowTexture = nullptr;
-    m_texSceneColor = nullptr;
 }
 
 // Builds and writes constant buffers from scratch to the proper slots for 
@@ -163,116 +161,6 @@ void FrameResource::WriteConstantBuffers(const D3D12_VIEWPORT& viewport, Camera*
 
     pScreenInfoData->size[0] = std::floor(viewport.Width);
     pScreenInfoData->size[1] = std::floor(viewport.Height);
-}
-
-void FrameResource::RenderFrame()
-{
-    FrameBegin();
-    RenderShadow();
-    RenderScene();
-    RenderPostprocess();
-}
-
-void FrameResource::FrameBegin()
-{
-}
-
-void FrameResource::RenderShadow()
-{
-    PIXBeginEvent(commandList, 0, L"Rendering shadow pass...");
-    
-    // Shadow pass. We use constant buf #1 and depth stencil #1
-    // with rendering to the render target disabled.
-    
-    commandList->ResourceBarrier(1,
-        &CD3DX12_RESOURCE_BARRIER::Transition(m_shadowTexture.Get(),
-            D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE,
-            D3D12_RESOURCE_STATE_DEPTH_WRITE));
-    
-    // Clear the depth stencil buffer in preparation for rendering the shadow map.
-    commandList->ClearDepthStencilView(m_shadowDepthView, D3D12_CLEAR_FLAG_DEPTH,
-        1.0f, 0, 0, nullptr);
-
-    commandList->OMSetRenderTargets(0, nullptr,
-        FALSE, &m_shadowDepthView);
-    commandList->OMSetStencilRef(0);
-
-    commandList->RSSetViewports(1, &m_viewport);
-    commandList->RSSetScissorRects(1, &m_scissorRect);
-
-    commandList->SetGraphicsRootSignature(m_sigRenderShadow.Get());
-    // Set null SRVs for the diffuse/normal textures.
-    commandList->SetGraphicsRootDescriptorTable(0, m_root->m_srvNullGPU);    
-    commandList->SetGraphicsRootDescriptorTable(1, cbvShadow);
-    // Set a null SRV for the shadow texture.
-    commandList->SetGraphicsRootDescriptorTable(2, m_nullSrvHandle);      
-    commandList->SetGraphicsRootDescriptorTable(3, m_samplerHeap->GetGPUDescriptorHandleForHeapStart());
-    
-    commandList->IASetPrimitiveTopology(D3D_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
-    commandList->IASetVertexBuffers(0, 1, &m_vertexBufferView);
-    commandList->IASetIndexBuffer(&m_indexBufferView);
-    
-    for (const SampleAssets::DrawParameters& drawArgs : SampleAssets::Draws)
-    {
-        commandList->DrawIndexedInstanced(
-            drawArgs.IndexCount, 1,
-            drawArgs.IndexStart, drawArgs.VertexBase,
-            0);
-    }
-
-    PIXEndEvent(commandList);
-}
-
-void FrameResource::RenderScene()
-{
-    PIXBeginEvent(commandList, 0, L"Rendering scene pass...");
-    // Scene pass. We use constant buf #2 and depth stencil #2
-    // with rendering to the render target enabled.
-    
-    // Transition the shadow map from writeable to readable.
-    D3D12_RESOURCE_TRANSITION_BARRIER barriers[] = {
-        CD3DX12_RESOURCE_BARRIER::Transition(m_shadowTexture.Get(),
-            D3D12_RESOURCE_STATE_DEPTH_WRITE, D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE),
-        CD3DX12_RESOURCE_BARRIER::Transition(m_texSceneColor.Get(),
-            D3D12_RESOURCE_STATE_SHADING_RATE_SOURCE, D3D12_RESOURCE_STATE_RENDER_TARGET)
-    };
-    
-    commandList->ResourceBarrier(_countof(barriers), barriers);
-
-    // Clear the render target and depth stencil.
-    const float clearColor[] = { 0.0f, 0.0f, 0.0f, 1.0f };
-    commandList->ClearRenderTargetView(m_rtvSceneColorCpu, clearColor, 0, nullptr);
-    commandList->ClearDepthStencilView(m_dsvDepthStencil, D3D12_CLEAR_FLAG_DEPTH,
-        1.0f, 0, 0, nullptr);
-
-    commandList->OMSetRenderTargets(1, &m_rtvSceneColorCpu,
-        FALSE, &m_dsvDepthStencil);
-    commandList->OMSetStencilRef(0);
-
-    commandList->RSSetViewports(1, &m_viewport);
-    commandList->RSSetScissorRects(1, &m_scissorRect);
-    
-    commandList->IASetPrimitiveTopology(D3D_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
-    commandList->IASetVertexBuffers(0, 1, &m_vertexBufferView);
-    commandList->IASetIndexBuffer(&m_indexBufferView);
-
-    commandList->SetGraphicsRootSignature(m_sigRenderScene.Get());
-    commandList->SetGraphicsRootDescriptorTable(1, cbvScene);
-    commandList->SetGraphicsRootDescriptorTable(2, m_shadowDepthHandle); // Set the shadow texture as an SRV.
-    commandList->SetGraphicsRootDescriptorTable(3, m_samplerHeap->GetGPUDescriptorHandleForHeapStart());
-    
-    for (const SampleAssets::DrawParameters& drawArgs : SampleAssets::Draws)
-    {
-        // Set the diffuse and normal textures for the current object.
-        CD3DX12_GPU_DESCRIPTOR_HANDLE cbvSrvHandle(m_srvTextureStart,
-            drawArgs.DiffuseTextureIndex, m_cbvSrvDescriptorSize);
-        commandList->SetGraphicsRootDescriptorTable(0, cbvSrvHandle);
-
-        commandList->DrawIndexedInstanced(drawArgs.IndexCount, 1,
-            drawArgs.IndexStart, drawArgs.VertexBase, 0);
-    }
-    
-    PIXEndEvent(commandList);
 }
 
 

@@ -245,6 +245,21 @@ void D3D12PostprocessBlur::CreateSceneSignatures()
         signature->GetBufferPointer(), signature->GetBufferSize(),
         IID_PPV_ARGS(&m_sigRenderScene)));
     NAME_D3D12_OBJECT(m_sigRenderScene);
+
+    ranges[0].Init(D3D12_DESCRIPTOR_RANGE_TYPE_SRV, 1, 0, 0,
+        D3D12_DESCRIPTOR_RANGE_FLAG_DATA_STATIC);
+    rootParameters[0].InitAsDescriptorTable(1, &ranges[0], D3D12_SHADER_VISIBILITY_PIXEL);
+    rootParameters[1].InitAsConstantBufferView(0, 0,
+        D3D12_ROOT_DESCRIPTOR_FLAG_DATA_STATIC, D3D12_SHADER_VISIBILITY_PIXEL);
+    rootSignatureDesc.Init_1_1(2, rootParameters, 0, nullptr,
+        D3D12_ROOT_SIGNATURE_FLAG_ALLOW_INPUT_ASSEMBLER_INPUT_LAYOUT);
+
+    ThrowIfFailed(D3DX12SerializeVersionedRootSignature(&rootSignatureDesc, m_featureData.HighestVersion,
+        &signature, &error));
+    ThrowIfFailed(m_device->CreateRootSignature(0,
+        signature->GetBufferPointer(), signature->GetBufferSize(),
+        IID_PPV_ARGS(&m_sigBlur)));
+    NAME_D3D12_OBJECT(m_sigBlur);
 }
 
 void D3D12PostprocessBlur::CreateScenePSOs()
@@ -327,9 +342,10 @@ void D3D12PostprocessBlur::CreateDepthBuffer()
 
     NAME_D3D12_OBJECT(m_depthStencil);
 
+    m_dsvDepthStencil = m_dsvHeap->GetCPUDescriptorHandleForHeapStart();
     // Create the depth stencil view.
     m_device->CreateDepthStencilView(m_depthStencil.Get(),
-        nullptr, m_dsvHeap->GetCPUDescriptorHandleForHeapStart());
+        nullptr, m_dsvDepthStencil);
 }
 
 void D3D12PostprocessBlur::CreateSceneAssets()
@@ -891,7 +907,6 @@ void D3D12PostprocessBlur::OnRender()
     }
 }
 
-// Assemble the CommandListPre command list.
 void D3D12PostprocessBlur::BeginFrame()
 {    
     // Reset the command allocator and list.
@@ -901,149 +916,143 @@ void D3D12PostprocessBlur::BeginFrame()
         
     ID3D12DescriptorHeap* ppHeaps[] = { m_cbvSrvHeap.Get(), m_samplerHeap.Get() };
     commandList->SetDescriptorHeaps(_countof(ppHeaps), ppHeaps);
+}
 
-    // Indicate that the back buffer will be used as a render target.
-    commandList->ResourceBarrier(1, &CD3DX12_RESOURCE_BARRIER::Transition(
-        m_backBuffers[m_frameIndex].Get(), D3D12_RESOURCE_STATE_PRESENT, D3D12_RESOURCE_STATE_RENDER_TARGET));
+void D3D12PostprocessBlur::EndFrame()
+{
+    ID3D12GraphicsCommandList* commandList = m_pCurrentFrameResource->commandList.Get();
+    ThrowIfFailed(commandList->Close());
+}
+
+void D3D12PostprocessBlur::RenderShadow()
+{
+    ID3D12GraphicsCommandList* commandList = m_pCurrentFrameResource->commandList.Get();
+
+    PIXBeginEvent(commandList, 0, L"Rendering shadow pass...");
+    
+    // Shadow pass. We use constant buf #1 and depth stencil #1
+    // with rendering to the render target disabled.    
+    commandList->ResourceBarrier(1,
+        &CD3DX12_RESOURCE_BARRIER::Transition(m_shadowTexture.Get(),
+            D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE,
+            D3D12_RESOURCE_STATE_DEPTH_WRITE));
+    
+    // Clear the depth stencil buffer in preparation for rendering the shadow map.
+    commandList->ClearDepthStencilView(m_shadowDepthView, D3D12_CLEAR_FLAG_DEPTH,
+        1.0f, 0, 0, nullptr);
+
+    commandList->OMSetRenderTargets(0, nullptr,
+        FALSE, &m_shadowDepthView);
+
+    commandList->RSSetViewports(1, &m_viewport);
+    commandList->RSSetScissorRects(1, &m_scissorRect);
+
+    commandList->SetGraphicsRootSignature(m_sigRenderScene.Get());
+    // Set null SRVs for the diffuse/normal textures.
+    commandList->SetGraphicsRootDescriptorTable(0, m_srvNullGPU);    
+    commandList->SetGraphicsRootDescriptorTable(1, m_pCurrentFrameResource->cbvShadow);
+    // Set a null SRV for the shadow texture.
+    commandList->SetGraphicsRootDescriptorTable(2, m_srvNullGPU);      
+    commandList->SetGraphicsRootDescriptorTable(3, m_samplerHeap->GetGPUDescriptorHandleForHeapStart());
+    
+    commandList->IASetPrimitiveTopology(D3D_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
+    commandList->IASetVertexBuffers(0, 1, &m_vertexBufferView);
+    commandList->IASetIndexBuffer(&m_indexBufferView);
+    
+    for (const SampleAssets::DrawParameters& drawArgs : SampleAssets::Draws)
+    {
+        commandList->DrawIndexedInstanced(
+            drawArgs.IndexCount, 1,
+            drawArgs.IndexStart, drawArgs.VertexBase,
+            0);
+    }
+
+    PIXEndEvent(commandList);
+}
+
+void D3D12PostprocessBlur::RenderScene()
+{
+    ID3D12GraphicsCommandList* commandList = m_pCurrentFrameResource->commandList.Get();
+    
+    PIXBeginEvent(commandList, 0, L"Rendering scene pass...");
+    
+    // Scene pass. We use constant buf #2 and depth stencil #2
+    // with rendering to the render target enabled.
+    
+    // Transition the shadow map from writeable to readable.
+    D3D12_RESOURCE_TRANSITION_BARRIER barriers[] = {
+        CD3DX12_RESOURCE_BARRIER::Transition(m_shadowTexture.Get(),
+            D3D12_RESOURCE_STATE_DEPTH_WRITE, D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE),
+        CD3DX12_RESOURCE_BARRIER::Transition(m_texSceneColor.Get(),
+            D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE, D3D12_RESOURCE_STATE_RENDER_TARGET)
+    };
+    
+    commandList->ResourceBarrier(_countof(barriers), barriers);
 
     // Clear the render target and depth stencil.
     const float clearColor[] = { 0.0f, 0.0f, 0.0f, 1.0f };
-    CD3DX12_CPU_DESCRIPTOR_HANDLE rtvHandle(m_rtvHeap->GetCPUDescriptorHandleForHeapStart(), m_frameIndex, m_rtvDescriptorSize);
-    m_pCurrentFrameResource->m_commandLists[CommandListPre]->ClearRenderTargetView(rtvHandle, clearColor, 0, nullptr);
-    m_pCurrentFrameResource->m_commandLists[CommandListPre]->ClearDepthStencilView(m_dsvHeap->GetCPUDescriptorHandleForHeapStart(), D3D12_CLEAR_FLAG_DEPTH, 1.0f, 0, 0, nullptr);
+    commandList->ClearRenderTargetView(m_rtvSceneColorCpu, clearColor, 0, nullptr);
+    commandList->ClearDepthStencilView(m_dsvDepthStencil, D3D12_CLEAR_FLAG_DEPTH,
+        1.0f, 0, 0, nullptr);
 
-}
+    commandList->OMSetRenderTargets(1, &m_rtvSceneColorCpu,
+        FALSE, &m_dsvDepthStencil);
 
-// Assemble the CommandListMid command list.
-void D3D12PostprocessBlur::MidFrame()
-{
-    // Transition our shadow map from the shadow pass to readable in the scene pass.
-    m_pCurrentFrameResource->SwapBarriers();
+    commandList->RSSetViewports(1, &m_viewport);
+    commandList->RSSetScissorRects(1, &m_scissorRect);
+    
+    commandList->IASetPrimitiveTopology(D3D_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
+    commandList->IASetVertexBuffers(0, 1, &m_vertexBufferView);
+    commandList->IASetIndexBuffer(&m_indexBufferView);
 
-    ThrowIfFailed(m_pCurrentFrameResource->m_commandLists[CommandListMid]->Close());
-}
-
-// Assemble the CommandListPost command list.
-void D3D12PostprocessBlur::EndFrame()
-{
-    m_pCurrentFrameResource->Finish();
-
-    // Indicate that the back buffer will now be used to present.
-    m_pCurrentFrameResource->m_commandLists[CommandListPost]->ResourceBarrier(1, &CD3DX12_RESOURCE_BARRIER::Transition(m_backBuffers[m_frameIndex].Get(), D3D12_RESOURCE_STATE_RENDER_TARGET, D3D12_RESOURCE_STATE_PRESENT));
-
-    ThrowIfFailed(m_pCurrentFrameResource->m_commandLists[CommandListPost]->Close());
-}
-
-// Worker thread body. workerIndex is an integer from 0 to NumContexts 
-// describing the worker's thread index.
-void D3D12PostprocessBlur::WorkerThread(int threadIndex)
-{
-    assert(threadIndex >= 0);
-    assert(threadIndex < NumContexts);
-#if !SINGLETHREADED
-
-    while (threadIndex >= 0 && threadIndex < NumContexts)
+    commandList->SetGraphicsRootSignature(m_sigRenderScene.Get());
+    commandList->SetGraphicsRootDescriptorTable(1, m_pCurrentFrameResource->cbvScene);
+    commandList->SetGraphicsRootDescriptorTable(2, m_shadowDepthHandle); // Set the shadow texture as an SRV.
+    commandList->SetGraphicsRootDescriptorTable(3, m_samplerHeap->GetGPUDescriptorHandleForHeapStart());
+    
+    for (const SampleAssets::DrawParameters& drawArgs : SampleAssets::Draws)
     {
-        // Wait for main thread to tell us to draw.
+        // Set the diffuse and normal textures for the current object.
+        CD3DX12_GPU_DESCRIPTOR_HANDLE cbvSrvHandle(m_srvFirstTextureGPU,
+            drawArgs.DiffuseTextureIndex, m_defaultDescriptorSize);
+        commandList->SetGraphicsRootDescriptorTable(0, cbvSrvHandle);
 
-        WaitForSingleObject(m_workerBeginRenderFrame[threadIndex], INFINITE);
-
-#endif
-        ID3D12GraphicsCommandList* pShadowCommandList = m_pCurrentFrameResource->m_shadowCommandLists[threadIndex].Get();
-        ID3D12GraphicsCommandList* pSceneCommandList = m_pCurrentFrameResource->m_sceneCommandLists[threadIndex].Get();
-
-        //
-        // Shadow pass
-        //
-
-        // Populate the command list.
-        SetCommonPipelineState(pShadowCommandList);
-        m_pCurrentFrameResource->Bind(pShadowCommandList, FALSE, nullptr, nullptr);    // No need to pass RTV or DSV descriptor heap.
-
-        // Set null SRVs for the diffuse/normal textures.
-        pShadowCommandList->SetGraphicsRootDescriptorTable(0, m_cbvSrvHeap->GetGPUDescriptorHandleForHeapStart());
-
-        // Distribute objects over threads by drawing only 1/NumContexts 
-        // objects per worker (i.e. every object such that objectnum % 
-        // NumContexts == threadIndex).
-        PIXBeginEvent(pShadowCommandList, 0, L"Worker drawing shadow pass...");
-
-        for (int j = threadIndex; j < _countof(SampleAssets::Draws); j += NumContexts)
-        {
-            SampleAssets::DrawParameters drawArgs = SampleAssets::Draws[j];
-
-            pShadowCommandList->DrawIndexedInstanced(drawArgs.IndexCount, 1, drawArgs.IndexStart, drawArgs.VertexBase, 0);
-        }
-
-        PIXEndEvent(pShadowCommandList);
-
-        ThrowIfFailed(pShadowCommandList->Close());
-
-#if !SINGLETHREADED
-        // Submit shadow pass.
-        SetEvent(m_workerFinishShadowPass[threadIndex]);
-#endif
-
-        //
-        // Scene pass
-        // 
-
-        // Populate the command list.  These can only be sent after the shadow 
-        // passes for this frame have been submitted.
-        SetCommonPipelineState(pSceneCommandList);
-        CD3DX12_CPU_DESCRIPTOR_HANDLE rtvHandle(m_rtvHeap->GetCPUDescriptorHandleForHeapStart(), m_frameIndex, m_rtvDescriptorSize);
-        CD3DX12_CPU_DESCRIPTOR_HANDLE dsvHandle(m_dsvHeap->GetCPUDescriptorHandleForHeapStart());
-        m_pCurrentFrameResource->Bind(pSceneCommandList, TRUE, &rtvHandle, &dsvHandle);
-
-        PIXBeginEvent(pSceneCommandList, 0, L"Worker drawing scene pass...");
-
-        D3D12_GPU_DESCRIPTOR_HANDLE cbvSrvHeapStart = m_cbvSrvHeap->GetGPUDescriptorHandleForHeapStart();
-        const UINT cbvSrvDescriptorSize = m_device->GetDescriptorHandleIncrementSize(D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV);
-        const UINT nullSrvCount = 2;
-        for (int j = threadIndex; j < _countof(SampleAssets::Draws); j += NumContexts)
-        {
-            SampleAssets::DrawParameters drawArgs = SampleAssets::Draws[j];
-
-            // Set the diffuse and normal textures for the current object.
-            CD3DX12_GPU_DESCRIPTOR_HANDLE cbvSrvHandle(cbvSrvHeapStart, nullSrvCount + drawArgs.DiffuseTextureIndex, cbvSrvDescriptorSize);
-            pSceneCommandList->SetGraphicsRootDescriptorTable(0, cbvSrvHandle);
-
-            pSceneCommandList->DrawIndexedInstanced(drawArgs.IndexCount, 1, drawArgs.IndexStart, drawArgs.VertexBase, 0);
-        }
-
-        PIXEndEvent(pSceneCommandList);
-        ThrowIfFailed(pSceneCommandList->Close());
-
-#if !SINGLETHREADED
-        // Tell main thread that we are done.
-        SetEvent(m_workerFinishedRenderFrame[threadIndex]); 
+        commandList->DrawIndexedInstanced(drawArgs.IndexCount, 1,
+            drawArgs.IndexStart, drawArgs.VertexBase, 0);
     }
-#endif
+    
+    PIXEndEvent(commandList);
 }
 
-void D3D12PostprocessBlur::SetCommonPipelineState(ID3D12GraphicsCommandList* pCommandList)
+void D3D12PostprocessBlur::RenderPostprocess()
 {
-    pCommandList->SetGraphicsRootSignature(m_sigRenderScene.Get());
+    ID3D12GraphicsCommandList* commandList = m_pCurrentFrameResource->commandList.Get();
+    
+    PIXBeginEvent(commandList, 0, L"Rendering postprocess blur pass...");
 
-    ID3D12DescriptorHeap* ppHeaps[] = { m_cbvSrvHeap.Get(), m_samplerHeap.Get() };
-    pCommandList->SetDescriptorHeaps(_countof(ppHeaps), ppHeaps);
+    // Indicate that the back buffer will be used as a render target.
+    D3D12_RESOURCE_TRANSITION_BARRIER barriers[] = {
+        CD3DX12_RESOURCE_BARRIER::Transition(m_pCurrentFrameResource->backBuffer.Get(),
+            D3D12_RESOURCE_STATE_PRESENT, D3D12_RESOURCE_STATE_RENDER_TARGET),
+        CD3DX12_RESOURCE_BARRIER::Transition(m_texSceneColor.Get(),
+            D3D12_RESOURCE_STATE_RENDER_TARGET, D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE)
+    };
 
-    pCommandList->RSSetViewports(1, &m_viewport);
-    pCommandList->RSSetScissorRects(1, &m_scissorRect);
-    pCommandList->IASetPrimitiveTopology(D3D_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
-    pCommandList->IASetVertexBuffers(0, 1, &m_vertexBufferView);
-    pCommandList->IASetIndexBuffer(&m_indexBufferView);
-    pCommandList->SetGraphicsRootDescriptorTable(3, m_samplerHeap->GetGPUDescriptorHandleForHeapStart());
-    pCommandList->OMSetStencilRef(0);
+    commandList->ResourceBarrier(_countof(barriers), barriers);
 
-    // Render targets and depth stencil are set elsewhere because the 
-    // depth stencil depends on the frame resource being used.
+    commandList->OMSetRenderTargets(1, &m_pCurrentFrameResource->rtvBackBuffer,
+        FALSE, nullptr);
 
-    // Constant buffers are set elsewhere because they depend on the 
-    // frame resource being used.
+    commandList->RSSetViewports(1, &m_viewport);
+    commandList->RSSetScissorRects(1, &m_scissorRect);
 
-    // SRVs are set elsewhere because they change based on the object 
-    // being drawn.
+    commandList->IASetPrimitiveTopology(D3D_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
+    commandList->IASetVertexBuffers(0, 0, nullptr);
+    commandList->IASetIndexBuffer(nullptr);
+    
+
+
+    PIXEndEvent(commandList);
 }
 
 // Release sample's D3D objects.
