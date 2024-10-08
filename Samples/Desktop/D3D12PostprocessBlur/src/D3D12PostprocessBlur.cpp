@@ -246,6 +246,7 @@ void D3D12PostprocessBlur::CreateSceneSignatures()
         IID_PPV_ARGS(&m_sigRenderScene)));
     NAME_D3D12_OBJECT(m_sigRenderScene);
 
+    // Create root signature for postprocess blur.
     ranges[0].Init(D3D12_DESCRIPTOR_RANGE_TYPE_SRV, 1, 0, 0,
         D3D12_DESCRIPTOR_RANGE_FLAG_DATA_STATIC);
     rootParameters[0].InitAsDescriptorTable(1, &ranges[0], D3D12_SHADER_VISIBILITY_PIXEL);
@@ -291,13 +292,13 @@ void D3D12PostprocessBlur::CreateScenePSOs()
     psoDesc.RasterizerState = CD3DX12_RASTERIZER_DESC(D3D12_DEFAULT);
     psoDesc.BlendState = CD3DX12_BLEND_DESC(D3D12_DEFAULT);
     psoDesc.DepthStencilState = depthStencilDesc;
-    psoDesc.SampleMask = UINT_MAX;
     psoDesc.PrimitiveTopologyType = D3D12_PRIMITIVE_TOPOLOGY_TYPE_TRIANGLE;
     psoDesc.NumRenderTargets = 1;
     psoDesc.RTVFormats[0] = DXGI_FORMAT_R8G8B8A8_UNORM;
     psoDesc.DSVFormat = DXGI_FORMAT_D32_FLOAT;
     psoDesc.SampleDesc.Count = 1;
-
+    psoDesc.SampleMask = UINT_MAX;
+    
     ThrowIfFailed(m_device->CreateGraphicsPipelineState(&psoDesc, IID_PPV_ARGS(&m_psoRenderScene)));
     NAME_D3D12_OBJECT(m_psoRenderScene);
 
@@ -311,6 +312,7 @@ void D3D12PostprocessBlur::CreateScenePSOs()
     ThrowIfFailed(m_device->CreateGraphicsPipelineState(&psoDesc, IID_PPV_ARGS(&m_psoRenderShadow)));
     NAME_D3D12_OBJECT(m_psoRenderShadow);
 
+    // Create postprocess blur PSO.
     ThrowIfFailed(D3DCompileFromFile(GetAssetFullPath(L"Postprocess.hlsl").c_str(), nullptr, nullptr,
         "VSPostprocess", "vs_5_0", m_compileFlags, 0,
         &vertexShader, nullptr));
@@ -320,16 +322,22 @@ void D3D12PostprocessBlur::CreateScenePSOs()
         &vertexShader, nullptr));
 
     psoDesc.InputLayout.pInputElementDescs = nullptr; psoDesc.InputLayout.NumElements = 0;
-    psoDesc.pRootSignature = m_sigRenderScene.Get();
+    psoDesc.pRootSignature = m_sigBlur.Get();
     psoDesc.VS = CD3DX12_SHADER_BYTECODE(vertexShader.Get());
     psoDesc.PS = CD3DX12_SHADER_BYTECODE(pixelShader.Get());
     psoDesc.RasterizerState = CD3DX12_RASTERIZER_DESC(D3D12_DEFAULT);
     psoDesc.BlendState = CD3DX12_BLEND_DESC(D3D12_DEFAULT);
     psoDesc.DepthStencilState = CD3DX12_DEPTH_STENCIL_DESC(D3D12_DEFAULT);
     psoDesc.DepthStencilState.DepthEnable = false;
+    psoDesc.PrimitiveTopologyType = D3D12_PRIMITIVE_TOPOLOGY_TYPE_TRIANGLE;
+    psoDesc.NumRenderTargets = 1;
+    psoDesc.RTVFormats[0] = DXGI_FORMAT_R8G8B8A8_UNORM;
+    psoDesc.DSVFormat = DXGI_FORMAT_UNKNOWN;
+    psoDesc.SampleDesc.Count = 1;
     psoDesc.SampleMask = UINT_MAX;
-    
-    
+
+    ThrowIfFailed(m_device->CreateGraphicsPipelineState(&psoDesc, IID_PPV_ARGS(&m_psoBlur)));
+    NAME_D3D12_OBJECT(m_psoBlur);
 }
 
 void D3D12PostprocessBlur::CreateDepthBuffer()
@@ -967,6 +975,7 @@ void D3D12PostprocessBlur::RenderShadow()
     commandList->RSSetViewports(1, &m_viewport);
     commandList->RSSetScissorRects(1, &m_scissorRect);
 
+    commandList->SetPipelineState(m_psoRenderShadow.Get());
     commandList->SetGraphicsRootSignature(m_sigRenderScene.Get());
     // Set null SRVs for the diffuse/normal textures.
     commandList->SetGraphicsRootDescriptorTable(0, m_srvNullGPU);    
@@ -1025,6 +1034,7 @@ void D3D12PostprocessBlur::RenderScene()
     commandList->IASetVertexBuffers(0, 1, &m_vertexBufferView);
     commandList->IASetIndexBuffer(&m_indexBufferView);
 
+    commandList->SetPipelineState(m_psoRenderScene.Get());
     commandList->SetGraphicsRootSignature(m_sigRenderScene.Get());
     commandList->SetGraphicsRootDescriptorTable(1, m_pCurrentFrameResource->cbvScene);
     commandList->SetGraphicsRootDescriptorTable(2, m_shadowDepthHandle); // Set the shadow texture as an SRV.
@@ -1070,7 +1080,17 @@ void D3D12PostprocessBlur::RenderPostprocess()
     commandList->IASetVertexBuffers(0, 0, nullptr);
     commandList->IASetIndexBuffer(nullptr);
     
+    commandList->SetGraphicsRootSignature(m_sigBlur.Get());
+    commandList->SetPipelineState(m_psoBlur.Get());
+    commandList->SetGraphicsRootDescriptorTable(0, m_srvSceneColorGpu);
+    commandList->SetGraphicsRootConstantBufferView(1,
+        m_pCurrentFrameResource->cbScreenInfo->GetGPUVirtualAddress());
 
+    commandList->DrawInstanced(3, 1, 0, 0);
+
+    commandList->ResourceBarrier(CD3DX12_RESOURCE_BARRIER::Transition(
+        m_pCurrentFrameResource->backBuffer.Get(),
+        D3D12_RESOURCE_STATE_RENDER_TARGET, D3D12_RESOURCE_STATE_PRESENT));
 
     PIXEndEvent(commandList);
 }
