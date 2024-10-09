@@ -124,7 +124,6 @@ void D3D12PostprocessBlur::CreateRenderContext()
     ThrowIfFailed(factory->MakeWindowAssociation(Win32Application::GetHwnd(), DXGI_MWA_NO_ALT_ENTER));
 
     ThrowIfFailed(swapChain.As(&m_swapChain));
-    m_frameIndex = m_swapChain->GetCurrentBackBufferIndex();
     
     ThrowIfFailed(m_device->CreateCommandAllocator(D3D12_COMMAND_LIST_TYPE_DIRECT,
         IID_PPV_ARGS(&m_commandAllocator)));
@@ -200,7 +199,8 @@ void D3D12PostprocessBlur::CreateFrameResources()
         ThrowIfFailed(m_swapChain->GetBuffer(i, IID_PPV_ARGS(&backBuffer)));
         m_device->CreateRenderTargetView(backBuffer.Get(), nullptr, rtvHandle);
 
-        m_frameResources[i] = new FrameResource(m_device.Get(), m_cbvSrvHeap.Get(),
+        m_frameResources[i] = new FrameResource(m_device.Get(),
+            m_cbvSrvHeap.Get(), m_defaultDescriptorSize,
             backBuffer.Get(), rtvHandle, i);
         
         m_frameResources[i]->WriteConstantBuffers(m_viewport, &m_camera,
@@ -248,7 +248,7 @@ void D3D12PostprocessBlur::CreateSceneSignatures()
 
     // Create root signature for postprocess blur.
     ranges[0].Init(D3D12_DESCRIPTOR_RANGE_TYPE_SRV, 1, 0, 0,
-        D3D12_DESCRIPTOR_RANGE_FLAG_DATA_STATIC);
+        D3D12_DESCRIPTOR_RANGE_FLAG_DATA_VOLATILE);
     rootParameters[0].InitAsDescriptorTable(1, &ranges[0], D3D12_SHADER_VISIBILITY_PIXEL);
     rootParameters[1].InitAsConstantBufferView(0, 0,
         D3D12_ROOT_DESCRIPTOR_FLAG_DATA_STATIC, D3D12_SHADER_VISIBILITY_PIXEL);
@@ -267,6 +267,7 @@ void D3D12PostprocessBlur::CreateScenePSOs()
 {
     ComPtr<ID3DBlob> vertexShader;
     ComPtr<ID3DBlob> pixelShader;
+    ComPtr<ID3DBlob> error;
     
     ThrowIfFailed(D3DCompileFromFile(GetAssetFullPath(L"shaders.hlsl").c_str(), nullptr, nullptr,
         "VSMain", "vs_5_0", m_compileFlags, 0, &vertexShader, nullptr));
@@ -313,13 +314,10 @@ void D3D12PostprocessBlur::CreateScenePSOs()
     NAME_D3D12_OBJECT(m_psoRenderShadow);
 
     // Create postprocess blur PSO.
-    ThrowIfFailed(D3DCompileFromFile(GetAssetFullPath(L"Postprocess.hlsl").c_str(), nullptr, nullptr,
-        "VSPostprocess", "vs_5_0", m_compileFlags, 0,
-        &vertexShader, nullptr));
-    
-    ThrowIfFailed(D3DCompileFromFile(GetAssetFullPath(L"Postprocess.hlsl").c_str(), nullptr, nullptr,
-        "PSPostprocessBlurNaive", "ps_5_0", m_compileFlags, 0,
-        &vertexShader, nullptr));
+    vertexShader = CompileShader(GetAssetFullPath(L"Postprocess.hlsl").c_str(), nullptr,
+        "VSPostprocess", "vs_5_1");
+    pixelShader = CompileShader(GetAssetFullPath(L"Postprocess.hlsl").c_str(), nullptr,
+    "PSPostprocessBlurNaive", "ps_5_1");
 
     psoDesc.InputLayout.pInputElementDescs = nullptr; psoDesc.InputLayout.NumElements = 0;
     psoDesc.pRootSignature = m_sigBlur.Get();
@@ -398,7 +396,7 @@ void D3D12PostprocessBlur::LoadAssetVertexBuffer(const UINT8* pAssetData)
             &CD3DX12_HEAP_PROPERTIES(D3D12_HEAP_TYPE_DEFAULT),
             D3D12_HEAP_FLAG_NONE,
             &CD3DX12_RESOURCE_DESC::Buffer(SampleAssets::VertexDataSize),
-            D3D12_RESOURCE_STATE_COPY_DEST,
+            D3D12_RESOURCE_STATE_COMMON,
             nullptr,
             IID_PPV_ARGS(&m_vertexBuffer)));
 
@@ -443,7 +441,7 @@ void D3D12PostprocessBlur::LoadAssetIndexBuffer(const UINT8* pAssetData)
             &CD3DX12_HEAP_PROPERTIES(D3D12_HEAP_TYPE_DEFAULT),
             D3D12_HEAP_FLAG_NONE,
             &CD3DX12_RESOURCE_DESC::Buffer(SampleAssets::IndexDataSize),
-            D3D12_RESOURCE_STATE_COPY_DEST,
+            D3D12_RESOURCE_STATE_COMMON,
             nullptr,
             IID_PPV_ARGS(&m_indexBuffer)));
 
@@ -702,7 +700,7 @@ void D3D12PostprocessBlur::CreateShadowResources()
         &CD3DX12_HEAP_PROPERTIES(D3D12_HEAP_TYPE_DEFAULT),
         D3D12_HEAP_FLAG_NONE,
         &shadowTexDesc,
-        D3D12_RESOURCE_STATE_DEPTH_WRITE,
+        D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE,
         &clearValue,
         IID_PPV_ARGS(&m_shadowTexture)));
 
@@ -726,9 +724,9 @@ void D3D12PostprocessBlur::CreateShadowResources()
     // texture and cache the GPU descriptor handle. This SRV is for sampling 
     // the shadow map from our shader. It uses the same texture that we use 
     // as a depth-stencil during the shadow pass.
-    CD3DX12_CPU_DESCRIPTOR_HANDLE srvShadowCPU(m_dsvHeap->GetCPUDescriptorHandleForHeapStart(),
+    CD3DX12_CPU_DESCRIPTOR_HANDLE srvShadowCPU(m_cbvSrvHeap->GetCPUDescriptorHandleForHeapStart(),
         (INT)CSU_DESCRIPTORS::SHADOW_SRV, m_defaultDescriptorSize);
-    CD3DX12_GPU_DESCRIPTOR_HANDLE srvShadowGPU(m_dsvHeap->GetGPUDescriptorHandleForHeapStart(),
+    CD3DX12_GPU_DESCRIPTOR_HANDLE srvShadowGPU(m_cbvSrvHeap->GetGPUDescriptorHandleForHeapStart(),
         (INT)CSU_DESCRIPTORS::SHADOW_SRV, m_defaultDescriptorSize);
     
     D3D12_SHADER_RESOURCE_VIEW_DESC shadowSrvDesc = {};
@@ -750,7 +748,7 @@ void D3D12PostprocessBlur::CreatePostprocessResources()
         1, 1, 1, 0,
         D3D12_RESOURCE_FLAG_ALLOW_RENDER_TARGET);
 
-    FLOAT clearColor[] = {0.f, 0.f, 0.f, 0.f};
+    FLOAT clearColor[] = {0.f, 0.f, 0.f, 1.f};
     CD3DX12_CLEAR_VALUE clearSceneColor(DXGI_FORMAT_R8G8B8A8_UNORM,
         clearColor);
         
@@ -758,15 +756,15 @@ void D3D12PostprocessBlur::CreatePostprocessResources()
         &CD3DX12_HEAP_PROPERTIES(D3D12_HEAP_TYPE_DEFAULT),
         D3D12_HEAP_FLAG_NONE,
         &descSceneColor,
-        D3D12_RESOURCE_STATE_RENDER_TARGET,
+        D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE,
         &clearSceneColor,
         IID_PPV_ARGS(&m_texSceneColor)));
 
     NAME_D3D12_OBJECT(m_texSceneColor);
 
-    m_srvSceneColorCpu = CD3DX12_CPU_DESCRIPTOR_HANDLE(m_dsvHeap->GetCPUDescriptorHandleForHeapStart(),
+    m_srvSceneColorCpu = CD3DX12_CPU_DESCRIPTOR_HANDLE(m_cbvSrvHeap->GetCPUDescriptorHandleForHeapStart(),
     (INT)CSU_DESCRIPTORS::SCREEN_COLOR_SRV, m_defaultDescriptorSize);
-    m_srvSceneColorGpu = CD3DX12_GPU_DESCRIPTOR_HANDLE(m_dsvHeap->GetGPUDescriptorHandleForHeapStart(),
+    m_srvSceneColorGpu = CD3DX12_GPU_DESCRIPTOR_HANDLE(m_cbvSrvHeap->GetGPUDescriptorHandleForHeapStart(),
         (INT)CSU_DESCRIPTORS::SCREEN_COLOR_SRV, m_defaultDescriptorSize);
     
     D3D12_SHADER_RESOURCE_VIEW_DESC srvSceneColorDesc = {};
@@ -778,8 +776,6 @@ void D3D12PostprocessBlur::CreatePostprocessResources()
     m_device->CreateShaderResourceView(m_texSceneColor.Get(), &srvSceneColorDesc, m_srvSceneColorCpu);
     
     m_rtvSceneColorCpu = CD3DX12_CPU_DESCRIPTOR_HANDLE(m_rtvHeap->GetCPUDescriptorHandleForHeapStart(),
-        (INT)RTV_DESCRIPTORS::SCREEN_COLOR_RTV, m_rtvDescriptorSize);
-    m_rtvSceneColorGpu = CD3DX12_GPU_DESCRIPTOR_HANDLE(m_rtvHeap->GetGPUDescriptorHandleForHeapStart(),
         (INT)RTV_DESCRIPTORS::SCREEN_COLOR_RTV, m_rtvDescriptorSize);
 
     D3D12_RENDER_TARGET_VIEW_DESC rtvDesc = {};
@@ -793,11 +789,13 @@ void D3D12PostprocessBlur::CreatePostprocessResources()
 void D3D12PostprocessBlur::CreateSceneResources()
 {
     CreateDescriptorHeaps();
+    CreateDepthBuffer();
     CreateSceneSignatures();
     CreateScenePSOs();
     CreateSamplers();
     CreateSceneAssets();    
     CreateLights();
+    CreateShadowResources();
     CreatePostprocessResources();
 
     // Close the command list and use it to execute the initial GPU setup.
@@ -823,10 +821,6 @@ void D3D12PostprocessBlur::OnUpdate()
     // Get current GPU progress against submitted workload. Resources still scheduled 
     // for GPU execution cannot be modified or else undefined behavior will result.
     const UINT64 lastCompletedFence = m_fence->GetCompletedValue();
-
-    // Move to the next frame resource.
-    m_currentFrameResourceIndex = (m_currentFrameResourceIndex + 1) % FrameCount;
-    m_pCurrentFrameResource = m_frameResources[m_currentFrameResourceIndex];
 
     // Make sure that this frame resource isn't still in use by the GPU.
     // If it is, wait for it to complete.
@@ -859,7 +853,7 @@ void D3D12PostprocessBlur::OnUpdate()
     {
         for (int i = 0; i < NumLights; i++)
         {
-            float direction = frameChange * pow(-1.0f, i);
+            float direction = frameChange * powf(-1.0f, static_cast<float>(i));
             XMStoreFloat4(&m_lights[i].position, XMVector4Transform(XMLoadFloat4(&m_lights[i].position), XMMatrixRotationY(direction)));
 
             XMVECTOR eye = XMLoadFloat4(&m_lights[i].position);
@@ -881,18 +875,12 @@ void D3D12PostprocessBlur::OnRender()
     try
     {
         ID3D12GraphicsCommandList* commandList = m_pCurrentFrameResource->commandList.Get();
-        PIXBeginEvent(commandList, 0, L"Rendering frame begin ...");
-        
+                
         BeginFrame();
         RenderShadow();
         RenderScene();
         RenderPostprocess();
         EndFrame();
-        
-        ID3D12CommandList* commandLists[] = { commandList };
-        m_commandQueue->ExecuteCommandLists(1, commandLists);
-
-        PIXEndEvent(commandList);
         
         m_cpuTimer.Tick(NULL);
         if (m_titleCount == TitleThrottle)
@@ -915,12 +903,16 @@ void D3D12PostprocessBlur::OnRender()
         PIXBeginEvent(m_commandQueue.Get(), 0, L"Presenting to screen");
         ThrowIfFailed(m_swapChain->Present(1, 0));
         PIXEndEvent(m_commandQueue.Get());
-        m_frameIndex = m_swapChain->GetCurrentBackBufferIndex();
 
         // Signal and increment the fence value.
         m_pCurrentFrameResource->fenceValue = m_fenceValue;
         ThrowIfFailed(m_commandQueue->Signal(m_fence.Get(), m_fenceValue));
         m_fenceValue++;
+        
+        // Move to the next frame resource.
+        m_frameIndex ++;
+        m_currentFrameResourceIndex = m_swapChain->GetCurrentBackBufferIndex();
+        m_pCurrentFrameResource = m_frameResources[m_currentFrameResourceIndex];
     }
     catch (HrException& e)
     {
@@ -938,10 +930,12 @@ void D3D12PostprocessBlur::OnRender()
 void D3D12PostprocessBlur::BeginFrame()
 {    
     // Reset the command allocator and list.
-    ThrowIfFailed(m_frameResources[m_currentFrameResourceIndex]->commandAllocator->Reset());
-    ID3D12GraphicsCommandList* commandList = m_frameResources[m_currentFrameResourceIndex]->commandList.Get();
-    ThrowIfFailed(commandList->Reset());
-        
+    ThrowIfFailed(m_pCurrentFrameResource->commandAllocator->Reset());
+    ID3D12GraphicsCommandList* commandList = m_pCurrentFrameResource->commandList.Get();
+    ThrowIfFailed(commandList->Reset(m_pCurrentFrameResource->commandAllocator.Get(), nullptr));
+
+    PIXBeginEvent(commandList, 0, L"Rendering frame begin ...");
+    
     ID3D12DescriptorHeap* ppHeaps[] = { m_cbvSrvHeap.Get(), m_samplerHeap.Get() };
     commandList->SetDescriptorHeaps(_countof(ppHeaps), ppHeaps);
 }
@@ -949,7 +943,11 @@ void D3D12PostprocessBlur::BeginFrame()
 void D3D12PostprocessBlur::EndFrame()
 {
     ID3D12GraphicsCommandList* commandList = m_pCurrentFrameResource->commandList.Get();
+    PIXEndEvent(commandList);
     ThrowIfFailed(commandList->Close());
+
+    ID3D12CommandList* commandLists[] = { commandList };
+    m_commandQueue->ExecuteCommandLists(1, commandLists);
 }
 
 void D3D12PostprocessBlur::RenderShadow()
@@ -1009,7 +1007,7 @@ void D3D12PostprocessBlur::RenderScene()
     // with rendering to the render target enabled.
     
     // Transition the shadow map from writeable to readable.
-    D3D12_RESOURCE_TRANSITION_BARRIER barriers[] = {
+    D3D12_RESOURCE_BARRIER barriers[] = {
         CD3DX12_RESOURCE_BARRIER::Transition(m_shadowTexture.Get(),
             D3D12_RESOURCE_STATE_DEPTH_WRITE, D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE),
         CD3DX12_RESOURCE_BARRIER::Transition(m_texSceneColor.Get(),
@@ -1061,7 +1059,7 @@ void D3D12PostprocessBlur::RenderPostprocess()
     PIXBeginEvent(commandList, 0, L"Rendering postprocess blur pass...");
 
     // Indicate that the back buffer will be used as a render target.
-    D3D12_RESOURCE_TRANSITION_BARRIER barriers[] = {
+    D3D12_RESOURCE_BARRIER barriers[] = {
         CD3DX12_RESOURCE_BARRIER::Transition(m_pCurrentFrameResource->backBuffer.Get(),
             D3D12_RESOURCE_STATE_PRESENT, D3D12_RESOURCE_STATE_RENDER_TARGET),
         CD3DX12_RESOURCE_BARRIER::Transition(m_texSceneColor.Get(),
@@ -1088,7 +1086,7 @@ void D3D12PostprocessBlur::RenderPostprocess()
 
     commandList->DrawInstanced(3, 1, 0, 0);
 
-    commandList->ResourceBarrier(CD3DX12_RESOURCE_BARRIER::Transition(
+    commandList->ResourceBarrier(1, &CD3DX12_RESOURCE_BARRIER::Transition(
         m_pCurrentFrameResource->backBuffer.Get(),
         D3D12_RESOURCE_STATE_RENDER_TARGET, D3D12_RESOURCE_STATE_PRESENT));
 
@@ -1099,7 +1097,6 @@ void D3D12PostprocessBlur::RenderPostprocess()
 void D3D12PostprocessBlur::ReleaseD3DResources()
 {
     m_fence.Reset();
-    ResetComPtrArray(&m_backBuffers);
     m_commandQueue.Reset();
     m_swapChain.Reset();
     m_device.Reset();

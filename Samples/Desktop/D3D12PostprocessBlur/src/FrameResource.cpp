@@ -11,22 +11,24 @@
 
 #include "stdafx.h"
 #include "FrameResource.h"
+#include "D3D12PostprocessBlur.h"
 #include "SquidRoom.h"
 #include <cmath>
 
 FrameResource::FrameResource(ID3D12Device* pDevice,
     ID3D12DescriptorHeap* pCbvSrvHeap, UINT cbvSrvDescriptorSize,
     ID3D12Resource* pBackBuffer, const D3D12_CPU_DESCRIPTOR_HANDLE& hBackBuffer,
-    UINT frameResourceIndex) :
-    backBuffer(pBackBuffer),
-    rtvBackBuffer(hBackBuffer),
-    fenceValue(0)
+    UINT frameResourceIndex)
 {
+    fenceValue = 0;
+    backBuffer.Attach(pBackBuffer);
+    rtvBackBuffer = hBackBuffer;
+    
     ThrowIfFailed(pDevice->CreateCommandAllocator(D3D12_COMMAND_LIST_TYPE_DIRECT,
-            IID_PPV_ARGS(commandAllocator)));
+            IID_PPV_ARGS(&commandAllocator)));
     ThrowIfFailed(pDevice->CreateCommandList(0, D3D12_COMMAND_LIST_TYPE_DIRECT,
-            commandAllocator.Get(), m_psoRenderScene.Get(),
-            IID_PPV_ARGS(commandList)));
+            commandAllocator.Get(), nullptr,
+            IID_PPV_ARGS(&commandList)));
 
     NAME_D3D12_OBJECT(commandAllocator);
     NAME_D3D12_OBJECT(commandList);
@@ -67,12 +69,12 @@ FrameResource::FrameResource(ID3D12Device* pDevice,
     CD3DX12_CPU_DESCRIPTOR_HANDLE cpuHandleShadowCB(
         pCbvSrvHeap->GetCPUDescriptorHandleForHeapStart(),
         (INT)FRAME_CSU_DESCRIPTORS::NUM_DESCRIPTORS * frameResourceIndex +
-        (INT)FRAME_CSU_DESCRIPTORS::SHADOW_CBV,
+        (INT)FRAME_CSU_DESCRIPTORS::SHADOW_CBV + (INT)CSU_DESCRIPTORS::NUM_DESCRIPTORS,
         cbvSrvDescriptorSize);
     CD3DX12_GPU_DESCRIPTOR_HANDLE gpuHandleShadowCB(
         pCbvSrvHeap->GetGPUDescriptorHandleForHeapStart(),
         (INT)FRAME_CSU_DESCRIPTORS::NUM_DESCRIPTORS * frameResourceIndex +
-        (INT)FRAME_CSU_DESCRIPTORS::SHADOW_CBV,
+        (INT)FRAME_CSU_DESCRIPTORS::SHADOW_CBV + (INT)CSU_DESCRIPTORS::NUM_DESCRIPTORS,
         cbvSrvDescriptorSize);
     
     D3D12_CONSTANT_BUFFER_VIEW_DESC cbvDesc = {};
@@ -87,12 +89,12 @@ FrameResource::FrameResource(ID3D12Device* pDevice,
     CD3DX12_CPU_DESCRIPTOR_HANDLE cpuHandleSceneCB(
     pCbvSrvHeap->GetCPUDescriptorHandleForHeapStart(),
     (INT)FRAME_CSU_DESCRIPTORS::NUM_DESCRIPTORS * frameResourceIndex +
-    (INT)FRAME_CSU_DESCRIPTORS::SCENE_CBV,
+    (INT)FRAME_CSU_DESCRIPTORS::SCENE_CBV + (INT)CSU_DESCRIPTORS::NUM_DESCRIPTORS,
     cbvSrvDescriptorSize);
     CD3DX12_GPU_DESCRIPTOR_HANDLE gpuHandleSceneCB(
         pCbvSrvHeap->GetGPUDescriptorHandleForHeapStart(),
         (INT)FRAME_CSU_DESCRIPTORS::NUM_DESCRIPTORS * frameResourceIndex +
-        (INT)FRAME_CSU_DESCRIPTORS::SCENE_CBV,
+        (INT)FRAME_CSU_DESCRIPTORS::SCENE_CBV + (INT)CSU_DESCRIPTORS::NUM_DESCRIPTORS,
         cbvSrvDescriptorSize);
     
     // Describe and create the scene constant buffer view (CBV) and 
@@ -107,10 +109,10 @@ FrameResource::FrameResource(ID3D12Device* pDevice,
     ThrowIfFailed(pDevice->CreateCommittedResource(
         &CD3DX12_HEAP_PROPERTIES(D3D12_HEAP_TYPE_UPLOAD),
         D3D12_HEAP_FLAG_NONE,
-        CD3DX12_RESOURCE_DESC::Buffer(szScreenInfoCB),
+        &CD3DX12_RESOURCE_DESC::Buffer(szScreenInfoCB),
         D3D12_RESOURCE_STATE_GENERIC_READ,
         nullptr,
-        IID_PPV_ARGS(cbScreenInfo)));
+        IID_PPV_ARGS(&cbScreenInfo)));
 
     ThrowIfFailed(cbScreenInfo->Map(0, &readRange,
         reinterpret_cast<void**>(&pScreenInfoData)));
@@ -159,8 +161,8 @@ void FrameResource::WriteConstantBuffers(const D3D12_VIEWPORT& viewport, Camera*
     memcpy(pSceneData, &sceneConsts, sizeof(SceneConstantBuffer));
     memcpy(pShadowData, &shadowConsts, sizeof(SceneConstantBuffer));
 
-    pScreenInfoData->size[0] = std::floor(viewport.Width);
-    pScreenInfoData->size[1] = std::floor(viewport.Height);
+    pScreenInfoData->size[0] = static_cast<UINT>(std::floor(viewport.Width));
+    pScreenInfoData->size[1] = static_cast<UINT>(std::floor(viewport.Height));
 }
 
 

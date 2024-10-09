@@ -115,7 +115,6 @@ private:
 
     // Postprocess Resources
     ComPtr<ID3D12Resource> m_texSceneColor;
-    D3D12_GPU_DESCRIPTOR_HANDLE m_rtvSceneColorGpu;
     D3D12_CPU_DESCRIPTOR_HANDLE m_rtvSceneColorCpu;
     D3D12_GPU_DESCRIPTOR_HANDLE m_srvSceneColorGpu;
     D3D12_CPU_DESCRIPTOR_HANDLE m_srvSceneColorCpu;

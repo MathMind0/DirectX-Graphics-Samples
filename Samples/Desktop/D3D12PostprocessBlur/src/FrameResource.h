@@ -14,7 +14,6 @@
 #include "stdafx.h"
 #include "Camera.h"
 #include "DXSampleHelper.h"
-#include "D3D12PostprocessBlur.h"
 
 using namespace DirectX;
 using namespace Microsoft::WRL;
@@ -75,7 +74,8 @@ public:
     ScreenInfo* pScreenInfoData;
     
 public:
-    FrameResource(ID3D12Device* pDevice, ID3D12DescriptorHeap* pCbvSrvHeap,
+    FrameResource(ID3D12Device* pDevice,
+        ID3D12DescriptorHeap* pCbvSrvHeap, UINT cbvSrvDescriptorSize,
         ID3D12Resource* pBackBuffer, const D3D12_CPU_DESCRIPTOR_HANDLE& hBackBuffer,
         UINT frameResourceIndex);
     
