@@ -13,8 +13,8 @@
   <PropertyGroup Label="Globals">
     <ProjectGuid>{3FC193D0-7E4E-4918-8431-D67391EE4145}</ProjectGuid>
     <Keyword>Win32Proj</Keyword>
-    <RootNamespace>D3D12Multithreading</RootNamespace>
-    <ProjectName>D3D12Multithreading</ProjectName>
+    <RootNamespace>D3D12PostprocessBlur</RootNamespace>
+    <ProjectName>D3D12PostprocessBlur</ProjectName>
     <WindowsTargetPlatformVersion>10.0.19041.0</WindowsTargetPlatformVersion>
   </PropertyGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.Default.props" />
