@@ -19,11 +19,10 @@ FrameResource::FrameResource(ID3D12Device* pDevice,
     ID3D12DescriptorHeap* pCbvSrvHeap, UINT cbvSrvDescriptorSize,
     ID3D12Resource* pBackBuffer, const D3D12_CPU_DESCRIPTOR_HANDLE& hBackBuffer,
     UINT frameResourceIndex)
+    : fenceValue(0)
+    , backBuffer(pBackBuffer)
+    , rtvBackBuffer(hBackBuffer)
 {
-    fenceValue = 0;
-    backBuffer.Attach(pBackBuffer);
-    rtvBackBuffer = hBackBuffer;
-    
     ThrowIfFailed(pDevice->CreateCommandAllocator(D3D12_COMMAND_LIST_TYPE_DIRECT,
             IID_PPV_ARGS(&commandAllocator)));
     ThrowIfFailed(pDevice->CreateCommandList(0, D3D12_COMMAND_LIST_TYPE_DIRECT,
@@ -120,6 +119,18 @@ FrameResource::FrameResource(ID3D12Device* pDevice,
 
 FrameResource::~FrameResource()
 {
+    cbShadow->Unmap(0, nullptr);
+    cbShadow.Reset();
+    
+    cbScene->Unmap(0, nullptr);
+    cbScene.Reset();
+    
+    cbScreenInfo->Unmap(0, nullptr);
+    cbScreenInfo.Reset();
+
+    backBuffer = nullptr;
+    commandList.Reset();
+    commandAllocator.Reset();
 }
 
 // Builds and writes constant buffers from scratch to the proper slots for 

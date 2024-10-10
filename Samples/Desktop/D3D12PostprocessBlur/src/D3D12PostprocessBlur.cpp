@@ -1060,7 +1060,7 @@ void D3D12PostprocessBlur::RenderPostprocess()
 
     // Indicate that the back buffer will be used as a render target.
     D3D12_RESOURCE_BARRIER barriers[] = {
-        CD3DX12_RESOURCE_BARRIER::Transition(m_pCurrentFrameResource->backBuffer.Get(),
+        CD3DX12_RESOURCE_BARRIER::Transition(m_pCurrentFrameResource->backBuffer,
             D3D12_RESOURCE_STATE_PRESENT, D3D12_RESOURCE_STATE_RENDER_TARGET),
         CD3DX12_RESOURCE_BARRIER::Transition(m_texSceneColor.Get(),
             D3D12_RESOURCE_STATE_RENDER_TARGET, D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE)
@@ -1087,7 +1087,7 @@ void D3D12PostprocessBlur::RenderPostprocess()
     commandList->DrawInstanced(3, 1, 0, 0);
 
     commandList->ResourceBarrier(1, &CD3DX12_RESOURCE_BARRIER::Transition(
-        m_pCurrentFrameResource->backBuffer.Get(),
+        m_pCurrentFrameResource->backBuffer,
         D3D12_RESOURCE_STATE_RENDER_TARGET, D3D12_RESOURCE_STATE_PRESENT));
 
     PIXEndEvent(commandList);
@@ -1147,6 +1147,7 @@ void D3D12PostprocessBlur::OnDestroy()
             ThrowIfFailed(m_fence->SetEventOnCompletion(fence, m_fenceEvent));
             WaitForSingleObject(m_fenceEvent, INFINITE);
         }
+        
         CloseHandle(m_fenceEvent);
     }
 
@@ -1154,6 +1155,8 @@ void D3D12PostprocessBlur::OnDestroy()
     {
         delete m_frameResources[i];
     }
+
+    ReleaseD3DResources();
 }
 
 void D3D12PostprocessBlur::OnKeyDown(UINT8 key)

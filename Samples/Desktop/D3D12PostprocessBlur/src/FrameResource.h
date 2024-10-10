@@ -59,7 +59,7 @@ public:
     ComPtr<ID3D12GraphicsCommandList> commandList;
     UINT64 fenceValue;
 
-    ComPtr<ID3D12Resource> backBuffer;
+    ID3D12Resource* backBuffer;
     D3D12_CPU_DESCRIPTOR_HANDLE rtvBackBuffer;
 
     ComPtr<ID3D12Resource> cbShadow;
