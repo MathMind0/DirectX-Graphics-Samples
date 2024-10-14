@@ -934,7 +934,7 @@ void D3D12PostprocessBlur::BeginFrame()
     ID3D12GraphicsCommandList* commandList = m_pCurrentFrameResource->commandList.Get();
     ThrowIfFailed(commandList->Reset(m_pCurrentFrameResource->commandAllocator.Get(), nullptr));
 
-    PIXBeginEvent(commandList, 0, L"Rendering frame begin ...");
+    PIXBeginEvent(commandList, 0, L"Rendering a Frame");
     
     ID3D12DescriptorHeap* ppHeaps[] = { m_cbvSrvHeap.Get(), m_samplerHeap.Get() };
     commandList->SetDescriptorHeaps(_countof(ppHeaps), ppHeaps);
@@ -954,7 +954,7 @@ void D3D12PostprocessBlur::RenderShadow()
 {
     ID3D12GraphicsCommandList* commandList = m_pCurrentFrameResource->commandList.Get();
 
-    PIXBeginEvent(commandList, 0, L"Rendering shadow pass...");
+    PIXBeginEvent(commandList, 0, L"Rendering Shadow");
     
     // Shadow pass. We use constant buf #1 and depth stencil #1
     // with rendering to the render target disabled.    
@@ -1001,7 +1001,7 @@ void D3D12PostprocessBlur::RenderScene()
 {
     ID3D12GraphicsCommandList* commandList = m_pCurrentFrameResource->commandList.Get();
     
-    PIXBeginEvent(commandList, 0, L"Rendering scene pass...");
+    PIXBeginEvent(commandList, 0, L"Rendering Scene");
     
     // Scene pass. We use constant buf #2 and depth stencil #2
     // with rendering to the render target enabled.
@@ -1056,7 +1056,7 @@ void D3D12PostprocessBlur::RenderPostprocess()
 {
     ID3D12GraphicsCommandList* commandList = m_pCurrentFrameResource->commandList.Get();
     
-    PIXBeginEvent(commandList, 0, L"Rendering postprocess blur pass...");
+    PIXBeginEvent(commandList, 0, L"Rendering Postprocess Blur");
 
     // Indicate that the back buffer will be used as a render target.
     D3D12_RESOURCE_BARRIER barriers[] = {
