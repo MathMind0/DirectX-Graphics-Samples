@@ -51,7 +51,7 @@ void D3D12PostprocessBlur::CreateRenderContext()
 {
     UINT dxgiFactoryFlags = 0;
 
-#if defined(_DEBUG)
+#if 0//defined(_DEBUG)
     // Enable the debug layer (requires the Graphics Tools "optional feature").
     // NOTE: Enabling the debug layer after device creation will invalidate the active device.
     {
