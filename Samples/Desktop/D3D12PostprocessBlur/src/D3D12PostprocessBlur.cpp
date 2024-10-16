@@ -265,14 +265,16 @@ void D3D12PostprocessBlur::CreateSceneSignatures()
 
 void D3D12PostprocessBlur::CreateScenePSOs()
 {
-    ComPtr<ID3DBlob> vertexShader;
-    ComPtr<ID3DBlob> pixelShader;
-    ComPtr<ID3DBlob> error;
+    struct
+    {
+        byte* code;
+        UINT size;
+    } vs, ps;
     
-    ThrowIfFailed(D3DCompileFromFile(GetAssetFullPath(L"shaders.hlsl").c_str(), nullptr, nullptr,
-        "VSMain", "vs_5_0", m_compileFlags, 0, &vertexShader, nullptr));
-    ThrowIfFailed(D3DCompileFromFile(GetAssetFullPath(L"shaders.hlsl").c_str(), nullptr, nullptr,
-        "PSMain", "ps_5_0", m_compileFlags, 0, &pixelShader, nullptr));
+    ReadDataFromFile(GetAssetFullPath(L"ShadingVS.cso").c_str(),
+        &vs.code, &vs.size);
+    ReadDataFromFile(GetAssetFullPath(L"ShadingPS.cso").c_str(),
+        &ps.code, &ps.size);
 
     D3D12_INPUT_LAYOUT_DESC inputLayoutDesc;
     inputLayoutDesc.pInputElementDescs = SampleAssets::StandardVertexDescription;
@@ -288,8 +290,8 @@ void D3D12PostprocessBlur::CreateScenePSOs()
     D3D12_GRAPHICS_PIPELINE_STATE_DESC psoDesc = {};
     psoDesc.InputLayout = inputLayoutDesc;
     psoDesc.pRootSignature = m_sigRenderScene.Get();
-    psoDesc.VS = CD3DX12_SHADER_BYTECODE(vertexShader.Get());
-    psoDesc.PS = CD3DX12_SHADER_BYTECODE(pixelShader.Get());
+    psoDesc.VS = {vs.code, vs.size};
+    psoDesc.PS = {ps.code, ps.size};
     psoDesc.RasterizerState = CD3DX12_RASTERIZER_DESC(D3D12_DEFAULT);
     psoDesc.BlendState = CD3DX12_BLEND_DESC(D3D12_DEFAULT);
     psoDesc.DepthStencilState = depthStencilDesc;
@@ -314,15 +316,15 @@ void D3D12PostprocessBlur::CreateScenePSOs()
     NAME_D3D12_OBJECT(m_psoRenderShadow);
 
     // Create postprocess blur PSO.
-    vertexShader = CompileShader(GetAssetFullPath(L"Postprocess.hlsl").c_str(), nullptr,
-        "VSPostprocess", "vs_5_1");
-    pixelShader = CompileShader(GetAssetFullPath(L"Postprocess.hlsl").c_str(), nullptr,
-    "PSPostprocessBlurNaive", "ps_5_1");
-
+    ReadDataFromFile(GetAssetFullPath(L"PostprocessVS.cso").c_str(),
+        &vs.code, &vs.size);
+    ReadDataFromFile(GetAssetFullPath(L"PostprocessBlurPS.cso").c_str(),
+        &ps.code, &ps.size);
+    
     psoDesc.InputLayout.pInputElementDescs = nullptr; psoDesc.InputLayout.NumElements = 0;
     psoDesc.pRootSignature = m_sigBlur.Get();
-    psoDesc.VS = CD3DX12_SHADER_BYTECODE(vertexShader.Get());
-    psoDesc.PS = CD3DX12_SHADER_BYTECODE(pixelShader.Get());
+    psoDesc.VS = {vs.code, vs.size};
+    psoDesc.PS = {ps.code, ps.size};
     psoDesc.RasterizerState = CD3DX12_RASTERIZER_DESC(D3D12_DEFAULT);
     psoDesc.BlendState = CD3DX12_BLEND_DESC(D3D12_DEFAULT);
     psoDesc.DepthStencilState = CD3DX12_DEPTH_STENCIL_DESC(D3D12_DEFAULT);

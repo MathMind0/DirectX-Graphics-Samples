@@ -132,14 +132,30 @@
     </ClCompile>
   </ItemGroup>
   <ItemGroup>
-    <CustomBuild Include="shaders.hlsl">
+    <CustomBuild Include="ShadingCommon.hlsl">
       <DeploymentContent>true</DeploymentContent>
-      <FileType>Document</FileType>
+      <FileType>Document</FileType>      
     </CustomBuild>
-    <CustomBuild Include="Postprocess.hlsl">
-      <DeploymentContent>true</DeploymentContent>
-      <FileType>Document</FileType>
-    </CustomBuild>
+    <FxCompile Include="ShadingVS.hlsl">
+      <ShaderType>Vertex</ShaderType>
+      <ShaderModel>6.0</ShaderModel>
+      <EntryPointName>VSMain</EntryPointName>
+    </FxCompile>
+    <FxCompile Include="ShadingPS.hlsl">
+      <ShaderType>Pixel</ShaderType>
+      <ShaderModel>6.0</ShaderModel>
+      <EntryPointName>PSMain</EntryPointName>
+    </FxCompile>
+    <FxCompile Include="PostprocessVS.hlsl">
+      <ShaderType>Vertex</ShaderType>
+      <ShaderModel>6.0</ShaderModel>
+      <EntryPointName>VSPostprocess</EntryPointName>
+    </FxCompile>
+    <FxCompile Include="PostprocessBlurPS.hlsl">
+      <ShaderType>Pixel</ShaderType>
+      <ShaderModel>6.0</ShaderModel>
+      <EntryPointName>PSPostprocessBlurNaive</EntryPointName>
+    </FxCompile>
   </ItemGroup>
   <ItemGroup>
     <CustomBuild Include="SquidRoom.bin">

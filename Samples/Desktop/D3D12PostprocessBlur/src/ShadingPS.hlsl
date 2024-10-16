@@ -8,6 +8,7 @@
 // PURPOSE, MERCHANTABILITY, OR NON-INFRINGEMENT.
 //
 //*********************************************************
+#include "ShadingCommon.hlsl"
 
 Texture2D shadowMap : register(t0);
 Texture2D diffuseMap : register(t1);
@@ -15,39 +16,6 @@ Texture2D normalMap : register(t2);
 
 SamplerState sampleWrap : register(s0);
 SamplerState sampleClamp : register(s1);
-
-#define NUM_LIGHTS 3
-#define SHADOW_DEPTH_BIAS 0.00005f
-
-struct LightState
-{
-    float3 position;
-    float3 direction;
-    float4 color;
-    float4 falloff;
-    float4x4 view;
-    float4x4 projection;
-};
-
-cbuffer SceneConstantBuffer : register(b0)
-{
-    float4x4 model;
-    float4x4 view;
-    float4x4 projection;
-    float4 ambientColor;
-    bool sampleShadowMap;
-    LightState lights[NUM_LIGHTS];
-};
-
-struct PSInput
-{
-    float4 position : SV_POSITION;
-    float4 worldpos : POSITION;
-    float2 uv : TEXCOORD0;
-    float3 normal : NORMAL;
-    float3 tangent : TANGENT;
-};
-
 
 //--------------------------------------------------------------------------------------
 // Sample normal map, convert to signed, apply tangent-to-world space transform.
@@ -122,36 +90,14 @@ float4 CalcUnshadowedAmountPCF2x2(int lightIndex, float4 vPosWorld)
     // 2x2 percentage closer filtering.
     float2 vTexelUnits = 1.0f / vShadowMapDims;
     float4 vShadowDepths;
-    vShadowDepths.x = shadowMap.Sample(sampleClamp, vShadowTexCoord);
-    vShadowDepths.y = shadowMap.Sample(sampleClamp, vShadowTexCoord + float2(vTexelUnits.x, 0.0f));
-    vShadowDepths.z = shadowMap.Sample(sampleClamp, vShadowTexCoord + float2(0.0f, vTexelUnits.y));
-    vShadowDepths.w = shadowMap.Sample(sampleClamp, vShadowTexCoord + vTexelUnits);
+    vShadowDepths.x = shadowMap.Sample(sampleClamp, vShadowTexCoord).x;
+    vShadowDepths.y = shadowMap.Sample(sampleClamp, vShadowTexCoord + float2(vTexelUnits.x, 0.0f)).x;
+    vShadowDepths.z = shadowMap.Sample(sampleClamp, vShadowTexCoord + float2(0.0f, vTexelUnits.y)).x;
+    vShadowDepths.w = shadowMap.Sample(sampleClamp, vShadowTexCoord + vTexelUnits).x;
 
     // What weighted fraction of the 4 samples are nearer to the light than this pixel?
     float4 vShadowTests = (vShadowDepths >= vLightSpaceDepth) ? 1.0f : 0.0f;
     return dot(vBilinearWeights, vShadowTests);
-}
-
-PSInput VSMain(float3 position : POSITION, float3 normal : NORMAL, float2 uv : TEXCOORD0, float3 tangent : TANGENT)
-{
-    PSInput result;
-
-    float4 newPosition = float4(position, 1.0f);
-
-    normal.z *= -1.0f;
-    newPosition = mul(newPosition, model);
-
-    result.worldpos = newPosition;
-
-    newPosition = mul(newPosition, view);
-    newPosition = mul(newPosition, projection);
-
-    result.position = newPosition;
-    result.uv = uv;
-    result.normal = normal;
-    result.tangent = tangent;
-
-    return result;
 }
 
 float4 PSMain(PSInput input) : SV_TARGET

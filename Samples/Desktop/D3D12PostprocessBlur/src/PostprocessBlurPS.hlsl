@@ -9,21 +9,6 @@ struct ScreenInfo
 Texture2D texSceneColor : register(t0);
 ConstantBuffer<ScreenInfo> screenInfo : register(b0);
 
-float4 VSPostprocess(uint vertexID : SV_VertexID) : SV_POSITION
-{
-    switch (vertexID)
-    {
-    case 0:
-        return float4(-1.0, -1.0, 1.0, 1.0);
-    case 1:
-        return float4(-1.0, 3.0, 1.0, 1.0);
-    case 2:
-        return float4(3.0, -1.0, 1.0, 1.0);
-    default:
-        return 0.0;
-    }  
-}
-
 float4 PSPostprocessBlurNaive(float4 screenPos : SV_Position) : SV_Target
 {
     int2 screenPosI = floor(screenPos.xy);
