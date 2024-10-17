@@ -26,7 +26,8 @@ D3D12PostprocessBlur::D3D12PostprocessBlur(UINT width, UINT height, std::wstring
     m_fenceValue(0),
     m_rtvDescriptorSize(0),
     m_currentFrameResourceIndex(0),
-    m_pCurrentFrameResource(nullptr)
+    m_pCurrentFrameResource(nullptr),
+    m_blurMethod(BLUR_METHOD::BLUR_OFF)
 {
     s_app = this;
 
@@ -338,6 +339,20 @@ void D3D12PostprocessBlur::CreateScenePSOs()
 
     ThrowIfFailed(m_device->CreateGraphicsPipelineState(&psoDesc, IID_PPV_ARGS(&m_psoBlur)));
     NAME_D3D12_OBJECT(m_psoBlur);
+
+    ReadDataFromFile(GetAssetFullPath(L"PSPostprocessBlurX.cso").c_str(),
+        &ps.code, &ps.size);
+    psoDesc.PS = {ps.code, ps.size};
+
+    ThrowIfFailed(m_device->CreateGraphicsPipelineState(&psoDesc, IID_PPV_ARGS(&m_psoBlurX)));
+    NAME_D3D12_OBJECT(m_psoBlurX);
+
+    ReadDataFromFile(GetAssetFullPath(L"PSPostprocessBlurY.cso").c_str(),
+        &ps.code, &ps.size);
+    psoDesc.PS = {ps.code, ps.size};
+
+    ThrowIfFailed(m_device->CreateGraphicsPipelineState(&psoDesc, IID_PPV_ARGS(&m_psoBlurY)));
+    NAME_D3D12_OBJECT(m_psoBlurY);
 }
 
 void D3D12PostprocessBlur::CreateDepthBuffer()
@@ -765,7 +780,7 @@ void D3D12PostprocessBlur::CreatePostprocessResources()
     NAME_D3D12_OBJECT(m_texSceneColor);
 
     m_srvSceneColorCpu = CD3DX12_CPU_DESCRIPTOR_HANDLE(m_cbvSrvHeap->GetCPUDescriptorHandleForHeapStart(),
-    (INT)CSU_DESCRIPTORS::SCREEN_COLOR_SRV, m_defaultDescriptorSize);
+        (INT)CSU_DESCRIPTORS::SCREEN_COLOR_SRV, m_defaultDescriptorSize);
     m_srvSceneColorGpu = CD3DX12_GPU_DESCRIPTOR_HANDLE(m_cbvSrvHeap->GetGPUDescriptorHandleForHeapStart(),
         (INT)CSU_DESCRIPTORS::SCREEN_COLOR_SRV, m_defaultDescriptorSize);
     
@@ -785,6 +800,28 @@ void D3D12PostprocessBlur::CreatePostprocessResources()
     rtvDesc.ViewDimension = D3D12_RTV_DIMENSION_TEXTURE2D;
     rtvDesc.Texture2D.MipSlice = 0;
     m_device->CreateRenderTargetView(m_texSceneColor.Get(), &rtvDesc, m_rtvSceneColorCpu);
+
+    ThrowIfFailed(m_device->CreateCommittedResource(
+        &CD3DX12_HEAP_PROPERTIES(D3D12_HEAP_TYPE_DEFAULT),
+        D3D12_HEAP_FLAG_NONE,
+        &descSceneColor,
+        D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE,
+        &clearSceneColor,
+        IID_PPV_ARGS(&m_texSceneColor2)));
+
+    NAME_D3D12_OBJECT(m_texSceneColor2);
+
+    m_srvSceneColorCpu2 = CD3DX12_CPU_DESCRIPTOR_HANDLE(m_cbvSrvHeap->GetCPUDescriptorHandleForHeapStart(),
+        (INT)CSU_DESCRIPTORS::SCREEN_COLOR2_SRV, m_defaultDescriptorSize);
+    m_srvSceneColorGpu2 = CD3DX12_GPU_DESCRIPTOR_HANDLE(m_cbvSrvHeap->GetGPUDescriptorHandleForHeapStart(),
+        (INT)CSU_DESCRIPTORS::SCREEN_COLOR2_SRV, m_defaultDescriptorSize);
+
+    m_device->CreateShaderResourceView(m_texSceneColor2.Get(), &srvSceneColorDesc, m_srvSceneColorCpu2);
+    
+    m_rtvSceneColorCpu2 = CD3DX12_CPU_DESCRIPTOR_HANDLE(m_rtvHeap->GetCPUDescriptorHandleForHeapStart(),
+        (INT)RTV_DESCRIPTORS::SCREEN_COLOR2_RTV, m_rtvDescriptorSize);
+
+    m_device->CreateRenderTargetView(m_texSceneColor2.Get(), &rtvDesc, m_rtvSceneColorCpu2);
 }
 
 // Load the sample assets.
@@ -1009,14 +1046,29 @@ void D3D12PostprocessBlur::RenderScene()
     // with rendering to the render target enabled.
     
     // Transition the shadow map from writeable to readable.
-    D3D12_RESOURCE_BARRIER barriers[] = {
-        CD3DX12_RESOURCE_BARRIER::Transition(m_shadowTexture.Get(),
-            D3D12_RESOURCE_STATE_DEPTH_WRITE, D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE),
-        CD3DX12_RESOURCE_BARRIER::Transition(m_texSceneColor.Get(),
-            D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE, D3D12_RESOURCE_STATE_RENDER_TARGET)
-    };
+    if (m_blurMethod == BLUR_METHOD::BLUR_OFF)
+    {
+        D3D12_RESOURCE_BARRIER barriers[] = {
+            CD3DX12_RESOURCE_BARRIER::Transition(m_shadowTexture.Get(),
+                D3D12_RESOURCE_STATE_DEPTH_WRITE, D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE),
+            CD3DX12_RESOURCE_BARRIER::Transition(m_pCurrentFrameResource->backBuffer,
+                D3D12_RESOURCE_STATE_PRESENT, D3D12_RESOURCE_STATE_RENDER_TARGET)
+        };
+
+        commandList->ResourceBarrier(_countof(barriers), barriers);
+    }
+    else
+    {
+        D3D12_RESOURCE_BARRIER barriers[] = {
+            CD3DX12_RESOURCE_BARRIER::Transition(m_shadowTexture.Get(),
+                D3D12_RESOURCE_STATE_DEPTH_WRITE, D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE),
+            CD3DX12_RESOURCE_BARRIER::Transition(m_texSceneColor.Get(),
+                D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE, D3D12_RESOURCE_STATE_RENDER_TARGET)
+        };
     
-    commandList->ResourceBarrier(_countof(barriers), barriers);
+        commandList->ResourceBarrier(_countof(barriers), barriers);
+    }
+
 
     // Clear the render target and depth stencil.
     const float clearColor[] = { 0.0f, 0.0f, 0.0f, 1.0f };
@@ -1024,7 +1076,8 @@ void D3D12PostprocessBlur::RenderScene()
     commandList->ClearDepthStencilView(m_dsvDepthStencil, D3D12_CLEAR_FLAG_DEPTH,
         1.0f, 0, 0, nullptr);
 
-    commandList->OMSetRenderTargets(1, &m_rtvSceneColorCpu,
+    commandList->OMSetRenderTargets(1,
+        m_blurMethod == BLUR_METHOD::BLUR_OFF ? &m_pCurrentFrameResource->rtvBackBuffer : &m_rtvSceneColorCpu,
         FALSE, &m_dsvDepthStencil);
 
     commandList->RSSetViewports(1, &m_viewport);
@@ -1060,33 +1113,95 @@ void D3D12PostprocessBlur::RenderPostprocess()
     
     PIXBeginEvent(commandList, 0, L"Rendering Postprocess Blur");
 
-    // Indicate that the back buffer will be used as a render target.
-    D3D12_RESOURCE_BARRIER barriers[] = {
-        CD3DX12_RESOURCE_BARRIER::Transition(m_pCurrentFrameResource->backBuffer,
-            D3D12_RESOURCE_STATE_PRESENT, D3D12_RESOURCE_STATE_RENDER_TARGET),
-        CD3DX12_RESOURCE_BARRIER::Transition(m_texSceneColor.Get(),
-            D3D12_RESOURCE_STATE_RENDER_TARGET, D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE)
-    };
+    switch (m_blurMethod)
+    {
+    case BLUR_METHOD::BLUR_NAIVE:
+        {
+            // Indicate that the back buffer will be used as a render target.
+            D3D12_RESOURCE_BARRIER barriers[] = {
+                CD3DX12_RESOURCE_BARRIER::Transition(m_pCurrentFrameResource->backBuffer,
+                    D3D12_RESOURCE_STATE_PRESENT, D3D12_RESOURCE_STATE_RENDER_TARGET),
+                CD3DX12_RESOURCE_BARRIER::Transition(m_texSceneColor.Get(),
+                    D3D12_RESOURCE_STATE_RENDER_TARGET, D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE)
+            };
 
-    commandList->ResourceBarrier(_countof(barriers), barriers);
+            commandList->ResourceBarrier(_countof(barriers), barriers);
 
-    commandList->OMSetRenderTargets(1, &m_pCurrentFrameResource->rtvBackBuffer,
-        FALSE, nullptr);
+            commandList->OMSetRenderTargets(1, &m_pCurrentFrameResource->rtvBackBuffer,
+                FALSE, nullptr);
 
-    commandList->RSSetViewports(1, &m_viewport);
-    commandList->RSSetScissorRects(1, &m_scissorRect);
+            commandList->RSSetViewports(1, &m_viewport);
+            commandList->RSSetScissorRects(1, &m_scissorRect);
 
-    commandList->IASetPrimitiveTopology(D3D_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
-    commandList->IASetVertexBuffers(0, 0, nullptr);
-    commandList->IASetIndexBuffer(nullptr);
+            commandList->IASetPrimitiveTopology(D3D_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
+            commandList->IASetVertexBuffers(0, 0, nullptr);
+            commandList->IASetIndexBuffer(nullptr);
     
-    commandList->SetGraphicsRootSignature(m_sigBlur.Get());
-    commandList->SetPipelineState(m_psoBlur.Get());
-    commandList->SetGraphicsRootDescriptorTable(0, m_srvSceneColorGpu);
-    commandList->SetGraphicsRootConstantBufferView(1,
-        m_pCurrentFrameResource->cbScreenInfo->GetGPUVirtualAddress());
+            commandList->SetGraphicsRootSignature(m_sigBlur.Get());
+            commandList->SetPipelineState(m_psoBlur.Get());
+            commandList->SetGraphicsRootDescriptorTable(0, m_srvSceneColorGpu);
+            commandList->SetGraphicsRootConstantBufferView(1,
+                m_pCurrentFrameResource->cbScreenInfo->GetGPUVirtualAddress());
 
-    commandList->DrawInstanced(3, 1, 0, 0);
+            commandList->DrawInstanced(3, 1, 0, 0);
+        }
+        break;
+
+    case BLUR_METHOD::BLUR_SEPARATE:
+        {
+            // Indicate that the back buffer will be used as a render target.
+            D3D12_RESOURCE_BARRIER barriers[] = {
+                CD3DX12_RESOURCE_BARRIER::Transition(m_texSceneColor2.Get(),
+                    D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE, D3D12_RESOURCE_STATE_RENDER_TARGET),
+                CD3DX12_RESOURCE_BARRIER::Transition(m_texSceneColor.Get(),
+                    D3D12_RESOURCE_STATE_RENDER_TARGET, D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE)
+            };
+
+            commandList->ResourceBarrier(_countof(barriers), barriers);
+
+            commandList->OMSetRenderTargets(1, &m_rtvSceneColorCpu2,
+                FALSE, nullptr);
+
+            commandList->RSSetViewports(1, &m_viewport);
+            commandList->RSSetScissorRects(1, &m_scissorRect);
+
+            commandList->IASetPrimitiveTopology(D3D_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
+            commandList->IASetVertexBuffers(0, 0, nullptr);
+            commandList->IASetIndexBuffer(nullptr);
+    
+            commandList->SetGraphicsRootSignature(m_sigBlur.Get());
+            commandList->SetPipelineState(m_psoBlurX.Get());
+            commandList->SetGraphicsRootDescriptorTable(0, m_srvSceneColorGpu);
+            commandList->SetGraphicsRootConstantBufferView(1,
+                m_pCurrentFrameResource->cbScreenInfo->GetGPUVirtualAddress());
+
+            commandList->DrawInstanced(3, 1, 0, 0);
+
+            D3D12_RESOURCE_BARRIER barriers2[] = {
+                CD3DX12_RESOURCE_BARRIER::Transition(m_pCurrentFrameResource->backBuffer,
+                    D3D12_RESOURCE_STATE_PRESENT, D3D12_RESOURCE_STATE_RENDER_TARGET),
+                CD3DX12_RESOURCE_BARRIER::Transition(m_texSceneColor2.Get(),
+                    D3D12_RESOURCE_STATE_RENDER_TARGET, D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE)
+            };
+
+            commandList->ResourceBarrier(_countof(barriers2), barriers2);
+
+            commandList->OMSetRenderTargets(1, &m_pCurrentFrameResource->rtvBackBuffer,
+                FALSE, nullptr);
+
+            commandList->SetGraphicsRootSignature(m_sigBlur.Get());
+            commandList->SetPipelineState(m_psoBlurY.Get());
+            commandList->SetGraphicsRootDescriptorTable(0, m_srvSceneColorGpu2);
+            commandList->SetGraphicsRootConstantBufferView(1,
+                m_pCurrentFrameResource->cbScreenInfo->GetGPUVirtualAddress());
+
+            commandList->DrawInstanced(3, 1, 0, 0);
+        }
+        break;
+
+    default:
+        break;
+    }
 
     commandList->ResourceBarrier(1, &CD3DX12_RESOURCE_BARRIER::Transition(
         m_pCurrentFrameResource->backBuffer,
@@ -1179,6 +1294,15 @@ void D3D12PostprocessBlur::OnKeyDown(UINT8 key)
         break;
     case VK_SPACE:
         m_keyboardInput.animate = !m_keyboardInput.animate;
+        break;
+    case VK_NUMPAD0:
+        m_blurMethod = BLUR_METHOD::BLUR_OFF;
+        break;
+    case VK_NUMPAD1:
+        m_blurMethod = BLUR_METHOD::BLUR_NAIVE;
+        break;
+    case VK_NUMPAD2:
+        m_blurMethod = BLUR_METHOD::BLUR_SEPARATE;
         break;
     }
 }

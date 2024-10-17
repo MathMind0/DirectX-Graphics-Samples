@@ -30,12 +30,14 @@ enum class CSU_DESCRIPTORS : UINT
 {
     SHADOW_SRV = 2 + _countof(SampleAssets::Textures),
     SCREEN_COLOR_SRV,
+    SCREEN_COLOR2_SRV,
     NUM_DESCRIPTORS
 };
 
 enum class RTV_DESCRIPTORS : UINT
 {
     SCREEN_COLOR_RTV = FrameCount,
+    SCREEN_COLOR2_RTV,
     NUM_DESCRIPTORS
 };
 
@@ -44,6 +46,14 @@ enum class DSV_DESCRIPTORS : UINT
     DEFAULT_DSV,
     SHADOW_DSV,
     NUM_DESCRIPTORS
+};
+
+enum class BLUR_METHOD : UINT
+{
+    BLUR_OFF,
+    BLUR_NAIVE,
+    BLUR_SEPARATE,
+    NUM_BLUR_METHOD
 };
 
 class D3D12PostprocessBlur : public DXSample
@@ -118,8 +128,15 @@ private:
     D3D12_CPU_DESCRIPTOR_HANDLE m_rtvSceneColorCpu;
     D3D12_GPU_DESCRIPTOR_HANDLE m_srvSceneColorGpu;
     D3D12_CPU_DESCRIPTOR_HANDLE m_srvSceneColorCpu;
+    ComPtr<ID3D12Resource> m_texSceneColor2;
+    D3D12_CPU_DESCRIPTOR_HANDLE m_rtvSceneColorCpu2;
+    D3D12_GPU_DESCRIPTOR_HANDLE m_srvSceneColorGpu2;
+    D3D12_CPU_DESCRIPTOR_HANDLE m_srvSceneColorCpu2;
     ComPtr<ID3D12RootSignature> m_sigBlur;
     ComPtr<ID3D12PipelineState> m_psoBlur;
+    ComPtr<ID3D12PipelineState> m_psoBlurX;
+    ComPtr<ID3D12PipelineState> m_psoBlurY;
+    BLUR_METHOD m_blurMethod;
 
     // App data
     InputState m_keyboardInput;

@@ -140,21 +140,61 @@
       <ShaderType>Vertex</ShaderType>
       <ShaderModel>6.0</ShaderModel>
       <EntryPointName>VSMain</EntryPointName>
+      <ObjectFileOutput>bin\x64\Debug\%(Filename).cso</ObjectFileOutput>
+      <DisableOptimizations>true</DisableOptimizations>
+      <EnableDebuggingInformation>true</EnableDebuggingInformation>
+      <SuppressStartupBanner>true</SuppressStartupBanner>
+      <TrackerLogDirectory>obj\x64\Debug\D3D12Pos.3FC193D0.tlog\</TrackerLogDirectory>
     </FxCompile>
     <FxCompile Include="ShadingPS.hlsl">
       <ShaderType>Pixel</ShaderType>
       <ShaderModel>6.0</ShaderModel>
       <EntryPointName>PSMain</EntryPointName>
+      <ObjectFileOutput>bin\x64\Debug\%(Filename).cso</ObjectFileOutput>
+      <DisableOptimizations>true</DisableOptimizations>
+      <EnableDebuggingInformation>true</EnableDebuggingInformation>
+      <SuppressStartupBanner>true</SuppressStartupBanner>
+      <TrackerLogDirectory>obj\x64\Debug\D3D12Pos.3FC193D0.tlog\</TrackerLogDirectory>
     </FxCompile>
     <FxCompile Include="PostprocessVS.hlsl">
       <ShaderType>Vertex</ShaderType>
       <ShaderModel>6.0</ShaderModel>
       <EntryPointName>VSPostprocess</EntryPointName>
+      <ObjectFileOutput>bin\x64\Debug\%(Filename).cso</ObjectFileOutput>
+      <DisableOptimizations>true</DisableOptimizations>
+      <EnableDebuggingInformation>true</EnableDebuggingInformation>
+      <SuppressStartupBanner>true</SuppressStartupBanner>
+      <TrackerLogDirectory>obj\x64\Debug\D3D12Pos.3FC193D0.tlog\</TrackerLogDirectory>
     </FxCompile>
     <FxCompile Include="PostprocessBlurPS.hlsl">
       <ShaderType>Pixel</ShaderType>
       <ShaderModel>6.0</ShaderModel>
       <EntryPointName>PSPostprocessBlurNaive</EntryPointName>
+      <ObjectFileOutput>bin\x64\Debug\%(Filename).cso</ObjectFileOutput>
+      <DisableOptimizations>true</DisableOptimizations>
+      <EnableDebuggingInformation>true</EnableDebuggingInformation>
+      <SuppressStartupBanner>true</SuppressStartupBanner>
+      <TrackerLogDirectory>obj\x64\Debug\D3D12Pos.3FC193D0.tlog\</TrackerLogDirectory>
+    </FxCompile>
+    <FxCompile Include="PostprocessBlurSeparatePS.hlsl">
+      <ShaderType>Pixel</ShaderType>
+      <ShaderModel>6.0</ShaderModel>
+      <EntryPointName>PSPostprocessBlurX</EntryPointName>
+      <ObjectFileOutput>bin\x64\Debug\PSPostprocessBlurX.cso</ObjectFileOutput>
+      <DisableOptimizations>true</DisableOptimizations>
+      <EnableDebuggingInformation>true</EnableDebuggingInformation>
+      <SuppressStartupBanner>true</SuppressStartupBanner>
+      <TrackerLogDirectory>obj\x64\Debug\D3D12Pos.3FC193D0.tlog\</TrackerLogDirectory>
+    </FxCompile>
+    <FxCompile Include="PostprocessBlurSeparatePS.hlsl">
+      <ShaderType>Pixel</ShaderType>
+      <ShaderModel>6.0</ShaderModel>
+      <EntryPointName>PSPostprocessBlurY</EntryPointName>
+      <ObjectFileOutput>bin\x64\Debug\PSPostprocessBlurY.cso</ObjectFileOutput>
+      <DisableOptimizations>true</DisableOptimizations>
+      <EnableDebuggingInformation>true</EnableDebuggingInformation>
+      <SuppressStartupBanner>true</SuppressStartupBanner>
+      <TrackerLogDirectory>obj\x64\Debug\D3D12Pos.3FC193D0.tlog\</TrackerLogDirectory>
     </FxCompile>
   </ItemGroup>
   <ItemGroup>
