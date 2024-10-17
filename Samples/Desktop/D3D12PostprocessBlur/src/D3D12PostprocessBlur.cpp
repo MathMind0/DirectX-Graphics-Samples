@@ -1295,13 +1295,13 @@ void D3D12PostprocessBlur::OnKeyDown(UINT8 key)
     case VK_SPACE:
         m_keyboardInput.animate = !m_keyboardInput.animate;
         break;
-    case VK_NUMPAD0:
+    case 0x30: // '0'
         m_blurMethod = BLUR_METHOD::BLUR_OFF;
         break;
-    case VK_NUMPAD1:
+    case 0x31: // '1'
         m_blurMethod = BLUR_METHOD::BLUR_NAIVE;
         break;
-    case VK_NUMPAD2:
+    case 0x32: // '2'
         m_blurMethod = BLUR_METHOD::BLUR_SEPARATE;
         break;
     }
