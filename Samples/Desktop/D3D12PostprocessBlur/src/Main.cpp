@@ -15,6 +15,6 @@
 _Use_decl_annotations_
 int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE, LPSTR, int nCmdShow)
 {
-    D3D12PostprocessBlur sample(1280, 720, L"D3D12 Postprocess Blur Sample");
+    D3D12PostprocessBlur sample(2560, 1440, L"D3D12 Postprocess Blur Sample");
     return Win32Application::Run(&sample, hInstance, nCmdShow);
 }
