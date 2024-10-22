@@ -1323,7 +1323,9 @@ void D3D12PostprocessBlur::RenderPostprocess()
                     D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE, D3D12_RESOURCE_STATE_UNORDERED_ACCESS)
             };
             commandList->ResourceBarrier(_countof(barriers2), barriers2);
-            
+
+            commandList->SetComputeRootSignature(m_sigBlurCS.Get());
+            commandList->SetPipelineState(m_psoBlurCSY.Get());
             commandList->SetComputeRootDescriptorTable((UINT)CSBLUR_SIG_PARAMS::SCENE_COLOR_TEX, m_srvSceneColorGpu2);
             commandList->SetComputeRootDescriptorTable((UINT)CSBLUR_SIG_PARAMS::OUTPUT_UAV, m_uavSceneColorGpu);
             
@@ -1454,6 +1456,9 @@ void D3D12PostprocessBlur::OnKeyDown(UINT8 key)
         break;
     case 0x32: // '2'
         m_blurMethod = BLUR_METHOD::BLUR_SEPARATE;
+        break;
+    case 0x33: // '3'
+        m_blurMethod = BLUR_METHOD::BLUR_COMPUTE;
         break;
     }
 }

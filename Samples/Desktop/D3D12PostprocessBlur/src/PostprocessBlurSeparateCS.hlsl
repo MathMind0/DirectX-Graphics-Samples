@@ -61,7 +61,7 @@ void CSPostprocessBlurY(int3 groupThreadID : SV_GroupThreadID, int3 dispatchThre
     [unroll]
     for (int i = 0; i <= 2 * BLUR_RADIUS; i++)
     {        
-        color.rgb += CachedColor[groupThreadID.x + i] * weight[i];
+        color.rgb += CachedColor[groupThreadID.y + i] * weight[i];
     }
 
     gTexOutput[dispatchThreadID.xy] = color;
