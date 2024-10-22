@@ -6,8 +6,9 @@ struct ScreenInfo
     uint4 size; //x = viewport width, y = viewport height.
 };
 
-Texture2D texSceneColor : register(t0);
 ConstantBuffer<ScreenInfo> screenInfo : register(b0);
+
+Texture2D texSceneColor : register(t0);
 
 float4 PSPostprocessBlurX(float4 screenPos : SV_Position) : SV_Target
 {

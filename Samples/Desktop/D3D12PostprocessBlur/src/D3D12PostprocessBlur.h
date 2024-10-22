@@ -31,6 +31,8 @@ enum class CSU_DESCRIPTORS : UINT
     SHADOW_SRV = 2 + _countof(SampleAssets::Textures),
     SCREEN_COLOR_SRV,
     SCREEN_COLOR2_SRV,
+    SCREEN_COLOR_UAV,
+    SCREEN_COLOR2_UAV,
     NUM_DESCRIPTORS
 };
 
@@ -53,7 +55,31 @@ enum class BLUR_METHOD : UINT
     BLUR_OFF,
     BLUR_NAIVE,
     BLUR_SEPARATE,
+    BLUR_COMPUTE,
     NUM_BLUR_METHOD
+};
+
+enum class RENDER_SCENE_SIG_PARAMS : UINT
+{
+    DIFFUSE_NORMAL_TEX,
+    SCENE_DATA_CB,
+    SHADOW_MAP_TEX,
+    SAMPLERS,
+    NUM_PARAMS
+};
+
+enum class BLUR_SIG_PARAMS : UINT
+{
+    SCENE_COLOR_TEX,
+    SCENE_INFO_CBV,
+    NUM_PARAMS
+};
+
+enum class CSBLUR_SIG_PARAMS : UINT
+{
+    SCENE_COLOR_TEX,
+    OUTPUT_UAV,
+    NUM_PARAMS
 };
 
 class D3D12PostprocessBlur : public DXSample
@@ -128,14 +154,21 @@ private:
     D3D12_CPU_DESCRIPTOR_HANDLE m_rtvSceneColorCpu;
     D3D12_GPU_DESCRIPTOR_HANDLE m_srvSceneColorGpu;
     D3D12_CPU_DESCRIPTOR_HANDLE m_srvSceneColorCpu;
+    D3D12_GPU_DESCRIPTOR_HANDLE m_uavSceneColorGpu;
+    D3D12_CPU_DESCRIPTOR_HANDLE m_uavSceneColorCpu;
     ComPtr<ID3D12Resource> m_texSceneColor2;
     D3D12_CPU_DESCRIPTOR_HANDLE m_rtvSceneColorCpu2;
     D3D12_GPU_DESCRIPTOR_HANDLE m_srvSceneColorGpu2;
     D3D12_CPU_DESCRIPTOR_HANDLE m_srvSceneColorCpu2;
+    D3D12_GPU_DESCRIPTOR_HANDLE m_uavSceneColorGpu2;
+    D3D12_CPU_DESCRIPTOR_HANDLE m_uavSceneColorCpu2;
     ComPtr<ID3D12RootSignature> m_sigBlur;
     ComPtr<ID3D12PipelineState> m_psoBlur;
     ComPtr<ID3D12PipelineState> m_psoBlurX;
     ComPtr<ID3D12PipelineState> m_psoBlurY;
+    ComPtr<ID3D12RootSignature> m_sigBlurCS;
+    ComPtr<ID3D12PipelineState> m_psoBlurCSX;
+    ComPtr<ID3D12PipelineState> m_psoBlurCSY;
     BLUR_METHOD m_blurMethod;
 
     // App data

@@ -215,26 +215,37 @@ void D3D12PostprocessBlur::CreateFrameResources()
 
 void D3D12PostprocessBlur::CreateSceneSignatures()
 {
-    CD3DX12_DESCRIPTOR_RANGE1 ranges[4]; // Perfomance TIP: Order from most frequent to least frequent.
+    CD3DX12_DESCRIPTOR_RANGE1 ranges[8];
+    CD3DX12_ROOT_PARAMETER1 rootParameters[8];
+    
+    // Perfomance TIP: Order from most frequent to least frequent.
     // 2 frequently changed diffuse + normal textures - using registers t1 and t2.
-    ranges[0].Init(D3D12_DESCRIPTOR_RANGE_TYPE_SRV, 2, 1, 0,
+    ranges[(UINT)RENDER_SCENE_SIG_PARAMS::DIFFUSE_NORMAL_TEX].Init(D3D12_DESCRIPTOR_RANGE_TYPE_SRV,
+        2, 1, 0,
         D3D12_DESCRIPTOR_RANGE_FLAG_DATA_STATIC);
     // 1 frequently changed constant buffer.
-    ranges[1].Init(D3D12_DESCRIPTOR_RANGE_TYPE_CBV, 1, 0, 0,
+    ranges[(UINT)RENDER_SCENE_SIG_PARAMS::SCENE_DATA_CB].Init(D3D12_DESCRIPTOR_RANGE_TYPE_CBV,
+        1, 0, 0,
         D3D12_DESCRIPTOR_RANGE_FLAG_DATA_STATIC);
     // 1 infrequently changed shadow texture - starting in register t0.
-    ranges[2].Init(D3D12_DESCRIPTOR_RANGE_TYPE_SRV, 1, 0);
+    ranges[(UINT)RENDER_SCENE_SIG_PARAMS::SHADOW_MAP_TEX].Init(D3D12_DESCRIPTOR_RANGE_TYPE_SRV,
+        1, 0, 0,
+        D3D12_DESCRIPTOR_RANGE_FLAG_DATA_VOLATILE);
     // 2 static samplers.
-    ranges[3].Init(D3D12_DESCRIPTOR_RANGE_TYPE_SAMPLER, 2, 0);                                            
-
-    CD3DX12_ROOT_PARAMETER1 rootParameters[4];
-    rootParameters[0].InitAsDescriptorTable(1, &ranges[0], D3D12_SHADER_VISIBILITY_PIXEL);
-    rootParameters[1].InitAsDescriptorTable(1, &ranges[1], D3D12_SHADER_VISIBILITY_ALL);
-    rootParameters[2].InitAsDescriptorTable(1, &ranges[2], D3D12_SHADER_VISIBILITY_PIXEL);
-    rootParameters[3].InitAsDescriptorTable(1, &ranges[3], D3D12_SHADER_VISIBILITY_PIXEL);
+    ranges[(UINT)RENDER_SCENE_SIG_PARAMS::SAMPLERS].Init(D3D12_DESCRIPTOR_RANGE_TYPE_SAMPLER,
+        2, 0);                                            
+    
+    rootParameters[(UINT)RENDER_SCENE_SIG_PARAMS::DIFFUSE_NORMAL_TEX].InitAsDescriptorTable(
+        1, &ranges[(UINT)RENDER_SCENE_SIG_PARAMS::DIFFUSE_NORMAL_TEX], D3D12_SHADER_VISIBILITY_PIXEL);
+    rootParameters[(UINT)RENDER_SCENE_SIG_PARAMS::SCENE_DATA_CB].InitAsDescriptorTable(
+        1, &ranges[(UINT)RENDER_SCENE_SIG_PARAMS::SCENE_DATA_CB], D3D12_SHADER_VISIBILITY_ALL);
+    rootParameters[(UINT)RENDER_SCENE_SIG_PARAMS::SHADOW_MAP_TEX].InitAsDescriptorTable(
+        1, &ranges[(UINT)RENDER_SCENE_SIG_PARAMS::SHADOW_MAP_TEX], D3D12_SHADER_VISIBILITY_PIXEL);
+    rootParameters[(UINT)RENDER_SCENE_SIG_PARAMS::SAMPLERS].InitAsDescriptorTable(
+        1, &ranges[(UINT)RENDER_SCENE_SIG_PARAMS::SAMPLERS], D3D12_SHADER_VISIBILITY_PIXEL);
 
     CD3DX12_VERSIONED_ROOT_SIGNATURE_DESC rootSignatureDesc;
-    rootSignatureDesc.Init_1_1(_countof(rootParameters), rootParameters,
+    rootSignatureDesc.Init_1_1((UINT)RENDER_SCENE_SIG_PARAMS::NUM_PARAMS, rootParameters,
         0, nullptr,
         D3D12_ROOT_SIGNATURE_FLAG_ALLOW_INPUT_ASSEMBLER_INPUT_LAYOUT);
 
@@ -248,12 +259,16 @@ void D3D12PostprocessBlur::CreateSceneSignatures()
     NAME_D3D12_OBJECT(m_sigRenderScene);
 
     // Create root signature for postprocess blur.
-    ranges[0].Init(D3D12_DESCRIPTOR_RANGE_TYPE_SRV, 1, 0, 0,
+    ranges[(UINT)BLUR_SIG_PARAMS::SCENE_COLOR_TEX].Init(D3D12_DESCRIPTOR_RANGE_TYPE_SRV,
+        1, 0, 0,
         D3D12_DESCRIPTOR_RANGE_FLAG_DATA_VOLATILE);
-    rootParameters[0].InitAsDescriptorTable(1, &ranges[0], D3D12_SHADER_VISIBILITY_PIXEL);
-    rootParameters[1].InitAsConstantBufferView(0, 0,
+    rootParameters[(UINT)BLUR_SIG_PARAMS::SCENE_COLOR_TEX].InitAsDescriptorTable(
+        1, &ranges[(UINT)BLUR_SIG_PARAMS::SCENE_COLOR_TEX], D3D12_SHADER_VISIBILITY_PIXEL);
+    rootParameters[(UINT)BLUR_SIG_PARAMS::SCENE_INFO_CBV].InitAsConstantBufferView(
+        0, 0,
         D3D12_ROOT_DESCRIPTOR_FLAG_DATA_STATIC, D3D12_SHADER_VISIBILITY_PIXEL);
-    rootSignatureDesc.Init_1_1(2, rootParameters, 0, nullptr,
+    rootSignatureDesc.Init_1_1((UINT)BLUR_SIG_PARAMS::NUM_PARAMS, rootParameters,
+        0, nullptr,
         D3D12_ROOT_SIGNATURE_FLAG_ALLOW_INPUT_ASSEMBLER_INPUT_LAYOUT);
 
     ThrowIfFailed(D3DX12SerializeVersionedRootSignature(&rootSignatureDesc, m_featureData.HighestVersion,
@@ -262,6 +277,27 @@ void D3D12PostprocessBlur::CreateSceneSignatures()
         signature->GetBufferPointer(), signature->GetBufferSize(),
         IID_PPV_ARGS(&m_sigBlur)));
     NAME_D3D12_OBJECT(m_sigBlur);
+
+    ranges[(UINT)CSBLUR_SIG_PARAMS::SCENE_COLOR_TEX].Init(D3D12_DESCRIPTOR_RANGE_TYPE_SRV,
+        1, 0, 0,
+        D3D12_DESCRIPTOR_RANGE_FLAG_DATA_VOLATILE);
+    rootParameters[(UINT)CSBLUR_SIG_PARAMS::SCENE_COLOR_TEX].InitAsDescriptorTable(
+        1, &ranges[(UINT)CSBLUR_SIG_PARAMS::SCENE_COLOR_TEX], D3D12_SHADER_VISIBILITY_ALL);
+    ranges[(UINT)CSBLUR_SIG_PARAMS::OUTPUT_UAV].Init(D3D12_DESCRIPTOR_RANGE_TYPE_UAV,
+        1, 0, 0,
+        D3D12_DESCRIPTOR_RANGE_FLAG_DATA_VOLATILE);
+    rootParameters[(UINT)CSBLUR_SIG_PARAMS::OUTPUT_UAV].InitAsDescriptorTable(
+        1, &ranges[(UINT)CSBLUR_SIG_PARAMS::OUTPUT_UAV], D3D12_SHADER_VISIBILITY_ALL);
+
+    rootSignatureDesc.Init_1_1((UINT)CSBLUR_SIG_PARAMS::NUM_PARAMS, rootParameters,
+        0, nullptr);
+
+    ThrowIfFailed(D3DX12SerializeVersionedRootSignature(&rootSignatureDesc, m_featureData.HighestVersion,
+        &signature, &error));
+    ThrowIfFailed(m_device->CreateRootSignature(0,
+        signature->GetBufferPointer(), signature->GetBufferSize(),
+        IID_PPV_ARGS(&m_sigBlurCS)));
+    NAME_D3D12_OBJECT(m_sigBlurCS);
 }
 
 void D3D12PostprocessBlur::CreateScenePSOs()
@@ -353,6 +389,21 @@ void D3D12PostprocessBlur::CreateScenePSOs()
 
     ThrowIfFailed(m_device->CreateGraphicsPipelineState(&psoDesc, IID_PPV_ARGS(&m_psoBlurY)));
     NAME_D3D12_OBJECT(m_psoBlurY);
+
+    D3D12_COMPUTE_PIPELINE_STATE_DESC descCS = {};
+    descCS.pRootSignature = m_sigBlurCS.Get();
+    
+    ReadDataFromFile(GetAssetFullPath(L"CSPostprocessBlurX.cso").c_str(),
+        &ps.code, &ps.size);
+    descCS.CS = {ps.code, ps.size};
+    ThrowIfFailed(m_device->CreateComputePipelineState(&descCS, IID_PPV_ARGS(&m_psoBlurCSX)));
+    NAME_D3D12_OBJECT(m_psoBlurCSX);
+
+    ReadDataFromFile(GetAssetFullPath(L"CSPostprocessBlurY.cso").c_str(),
+        &ps.code, &ps.size);
+    descCS.CS = {ps.code, ps.size};
+    ThrowIfFailed(m_device->CreateComputePipelineState(&descCS, IID_PPV_ARGS(&m_psoBlurCSY)));
+    NAME_D3D12_OBJECT(m_psoBlurCSY);
 }
 
 void D3D12PostprocessBlur::CreateDepthBuffer()
@@ -763,7 +814,7 @@ void D3D12PostprocessBlur::CreatePostprocessResources()
         static_cast<UINT>(m_viewport.Width),
         static_cast<UINT>(m_viewport.Height),
         1, 1, 1, 0,
-        D3D12_RESOURCE_FLAG_ALLOW_RENDER_TARGET);
+        D3D12_RESOURCE_FLAG_ALLOW_RENDER_TARGET | D3D12_RESOURCE_FLAG_ALLOW_UNORDERED_ACCESS);
 
     FLOAT clearColor[] = {0.f, 0.f, 0.f, 1.f};
     CD3DX12_CLEAR_VALUE clearSceneColor(DXGI_FORMAT_R8G8B8A8_UNORM,
@@ -791,6 +842,19 @@ void D3D12PostprocessBlur::CreatePostprocessResources()
     srvSceneColorDesc.Texture2D.MipLevels = 1;
 
     m_device->CreateShaderResourceView(m_texSceneColor.Get(), &srvSceneColorDesc, m_srvSceneColorCpu);
+
+    m_uavSceneColorCpu = CD3DX12_CPU_DESCRIPTOR_HANDLE(m_cbvSrvHeap->GetCPUDescriptorHandleForHeapStart(),
+        (INT)CSU_DESCRIPTORS::SCREEN_COLOR_UAV, m_defaultDescriptorSize);
+    m_uavSceneColorGpu = CD3DX12_GPU_DESCRIPTOR_HANDLE(m_cbvSrvHeap->GetGPUDescriptorHandleForHeapStart(),
+        (INT)CSU_DESCRIPTORS::SCREEN_COLOR_UAV, m_defaultDescriptorSize);
+
+    D3D12_UNORDERED_ACCESS_VIEW_DESC uavSceneColorDesc = {};
+    uavSceneColorDesc.Format = DXGI_FORMAT_UNKNOWN;
+    uavSceneColorDesc.ViewDimension = D3D12_UAV_DIMENSION_TEXTURE2D;
+    uavSceneColorDesc.Texture2D.MipSlice = 0;
+
+    m_device->CreateUnorderedAccessView(m_texSceneColor.Get(), nullptr,
+        &uavSceneColorDesc, m_uavSceneColorCpu);
     
     m_rtvSceneColorCpu = CD3DX12_CPU_DESCRIPTOR_HANDLE(m_rtvHeap->GetCPUDescriptorHandleForHeapStart(),
         (INT)RTV_DESCRIPTORS::SCREEN_COLOR_RTV, m_rtvDescriptorSize);
@@ -817,6 +881,14 @@ void D3D12PostprocessBlur::CreatePostprocessResources()
         (INT)CSU_DESCRIPTORS::SCREEN_COLOR2_SRV, m_defaultDescriptorSize);
 
     m_device->CreateShaderResourceView(m_texSceneColor2.Get(), &srvSceneColorDesc, m_srvSceneColorCpu2);
+
+    m_uavSceneColorCpu2 = CD3DX12_CPU_DESCRIPTOR_HANDLE(m_cbvSrvHeap->GetCPUDescriptorHandleForHeapStart(),
+        (INT)CSU_DESCRIPTORS::SCREEN_COLOR2_UAV, m_defaultDescriptorSize);
+    m_uavSceneColorGpu2 = CD3DX12_GPU_DESCRIPTOR_HANDLE(m_cbvSrvHeap->GetGPUDescriptorHandleForHeapStart(),
+        (INT)CSU_DESCRIPTORS::SCREEN_COLOR2_UAV, m_defaultDescriptorSize);
+
+    m_device->CreateUnorderedAccessView(m_texSceneColor2.Get(), nullptr,
+        &uavSceneColorDesc, m_uavSceneColorCpu2);
     
     m_rtvSceneColorCpu2 = CD3DX12_CPU_DESCRIPTOR_HANDLE(m_rtvHeap->GetCPUDescriptorHandleForHeapStart(),
         (INT)RTV_DESCRIPTORS::SCREEN_COLOR2_RTV, m_rtvDescriptorSize);
@@ -1015,11 +1087,15 @@ void D3D12PostprocessBlur::RenderShadow()
     commandList->SetPipelineState(m_psoRenderShadow.Get());
     commandList->SetGraphicsRootSignature(m_sigRenderScene.Get());
     // Set null SRVs for the diffuse/normal textures.
-    commandList->SetGraphicsRootDescriptorTable(0, m_srvNullGPU);    
-    commandList->SetGraphicsRootDescriptorTable(1, m_pCurrentFrameResource->cbvShadow);
+    commandList->SetGraphicsRootDescriptorTable(
+        (UINT)RENDER_SCENE_SIG_PARAMS::DIFFUSE_NORMAL_TEX, m_srvNullGPU);    
+    commandList->SetGraphicsRootDescriptorTable(
+        (UINT)RENDER_SCENE_SIG_PARAMS::SCENE_DATA_CB, m_pCurrentFrameResource->cbvShadow);
     // Set a null SRV for the shadow texture.
-    commandList->SetGraphicsRootDescriptorTable(2, m_srvNullGPU);      
-    commandList->SetGraphicsRootDescriptorTable(3, m_samplerHeap->GetGPUDescriptorHandleForHeapStart());
+    commandList->SetGraphicsRootDescriptorTable(
+        (UINT)RENDER_SCENE_SIG_PARAMS::SHADOW_MAP_TEX, m_srvNullGPU);      
+    commandList->SetGraphicsRootDescriptorTable(
+        (UINT)RENDER_SCENE_SIG_PARAMS::SAMPLERS, m_samplerHeap->GetGPUDescriptorHandleForHeapStart());
     
     commandList->IASetPrimitiveTopology(D3D_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
     commandList->IASetVertexBuffers(0, 1, &m_vertexBufferView);
@@ -1089,16 +1165,20 @@ void D3D12PostprocessBlur::RenderScene()
 
     commandList->SetPipelineState(m_psoRenderScene.Get());
     commandList->SetGraphicsRootSignature(m_sigRenderScene.Get());
-    commandList->SetGraphicsRootDescriptorTable(1, m_pCurrentFrameResource->cbvScene);
-    commandList->SetGraphicsRootDescriptorTable(2, m_shadowDepthHandle); // Set the shadow texture as an SRV.
-    commandList->SetGraphicsRootDescriptorTable(3, m_samplerHeap->GetGPUDescriptorHandleForHeapStart());
+    commandList->SetGraphicsRootDescriptorTable(
+        (UINT)RENDER_SCENE_SIG_PARAMS::SCENE_DATA_CB, m_pCurrentFrameResource->cbvScene);
+    commandList->SetGraphicsRootDescriptorTable(
+        (UINT)RENDER_SCENE_SIG_PARAMS::SHADOW_MAP_TEX, m_shadowDepthHandle); // Set the shadow texture as an SRV.
+    commandList->SetGraphicsRootDescriptorTable(
+        (UINT)RENDER_SCENE_SIG_PARAMS::SAMPLERS, m_samplerHeap->GetGPUDescriptorHandleForHeapStart());
     
     for (const SampleAssets::DrawParameters& drawArgs : SampleAssets::Draws)
     {
         // Set the diffuse and normal textures for the current object.
         CD3DX12_GPU_DESCRIPTOR_HANDLE cbvSrvHandle(m_srvFirstTextureGPU,
             drawArgs.DiffuseTextureIndex, m_defaultDescriptorSize);
-        commandList->SetGraphicsRootDescriptorTable(0, cbvSrvHandle);
+        commandList->SetGraphicsRootDescriptorTable(
+            (UINT)RENDER_SCENE_SIG_PARAMS::DIFFUSE_NORMAL_TEX, cbvSrvHandle);
 
         commandList->DrawIndexedInstanced(drawArgs.IndexCount, 1,
             drawArgs.IndexStart, drawArgs.VertexBase, 0);
@@ -1115,6 +1195,14 @@ void D3D12PostprocessBlur::RenderPostprocess()
 
     switch (m_blurMethod)
     {
+    case BLUR_METHOD::BLUR_OFF:
+        {
+            commandList->ResourceBarrier(1, &CD3DX12_RESOURCE_BARRIER::Transition(
+                m_pCurrentFrameResource->backBuffer,
+                D3D12_RESOURCE_STATE_RENDER_TARGET, D3D12_RESOURCE_STATE_PRESENT));
+        }
+        break;
+        
     case BLUR_METHOD::BLUR_NAIVE:
         {
             // Indicate that the back buffer will be used as a render target.
@@ -1139,11 +1227,15 @@ void D3D12PostprocessBlur::RenderPostprocess()
     
             commandList->SetGraphicsRootSignature(m_sigBlur.Get());
             commandList->SetPipelineState(m_psoBlur.Get());
-            commandList->SetGraphicsRootDescriptorTable(0, m_srvSceneColorGpu);
-            commandList->SetGraphicsRootConstantBufferView(1,
+            commandList->SetGraphicsRootDescriptorTable((UINT)BLUR_SIG_PARAMS::SCENE_COLOR_TEX, m_srvSceneColorGpu);
+            commandList->SetGraphicsRootConstantBufferView((UINT)BLUR_SIG_PARAMS::SCENE_INFO_CBV,
                 m_pCurrentFrameResource->cbScreenInfo->GetGPUVirtualAddress());
 
             commandList->DrawInstanced(3, 1, 0, 0);
+
+            commandList->ResourceBarrier(1, &CD3DX12_RESOURCE_BARRIER::Transition(
+                m_pCurrentFrameResource->backBuffer,
+                D3D12_RESOURCE_STATE_RENDER_TARGET, D3D12_RESOURCE_STATE_PRESENT));
         }
         break;
 
@@ -1171,8 +1263,8 @@ void D3D12PostprocessBlur::RenderPostprocess()
     
             commandList->SetGraphicsRootSignature(m_sigBlur.Get());
             commandList->SetPipelineState(m_psoBlurX.Get());
-            commandList->SetGraphicsRootDescriptorTable(0, m_srvSceneColorGpu);
-            commandList->SetGraphicsRootConstantBufferView(1,
+            commandList->SetGraphicsRootDescriptorTable((UINT)BLUR_SIG_PARAMS::SCENE_COLOR_TEX, m_srvSceneColorGpu);
+            commandList->SetGraphicsRootConstantBufferView((UINT)BLUR_SIG_PARAMS::SCENE_INFO_CBV,
                 m_pCurrentFrameResource->cbScreenInfo->GetGPUVirtualAddress());
 
             commandList->DrawInstanced(3, 1, 0, 0);
@@ -1186,16 +1278,77 @@ void D3D12PostprocessBlur::RenderPostprocess()
 
             commandList->ResourceBarrier(_countof(barriers2), barriers2);
 
-            commandList->OMSetRenderTargets(1, &m_pCurrentFrameResource->rtvBackBuffer,
+            commandList->OMSetRenderTargets(1,
+                &m_pCurrentFrameResource->rtvBackBuffer,
                 FALSE, nullptr);
 
             commandList->SetGraphicsRootSignature(m_sigBlur.Get());
             commandList->SetPipelineState(m_psoBlurY.Get());
-            commandList->SetGraphicsRootDescriptorTable(0, m_srvSceneColorGpu2);
-            commandList->SetGraphicsRootConstantBufferView(1,
+            commandList->SetGraphicsRootDescriptorTable((UINT)BLUR_SIG_PARAMS::SCENE_COLOR_TEX, m_srvSceneColorGpu2);
+            commandList->SetGraphicsRootConstantBufferView((UINT)BLUR_SIG_PARAMS::SCENE_INFO_CBV,
                 m_pCurrentFrameResource->cbScreenInfo->GetGPUVirtualAddress());
 
             commandList->DrawInstanced(3, 1, 0, 0);
+
+            commandList->ResourceBarrier(1, &CD3DX12_RESOURCE_BARRIER::Transition(
+                m_pCurrentFrameResource->backBuffer,
+                D3D12_RESOURCE_STATE_RENDER_TARGET, D3D12_RESOURCE_STATE_PRESENT));
+        }
+        break;
+
+    case BLUR_METHOD::BLUR_COMPUTE:
+        {
+            D3D12_RESOURCE_BARRIER barriers[] = {
+                CD3DX12_RESOURCE_BARRIER::Transition(m_texSceneColor2.Get(),
+                    D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE, D3D12_RESOURCE_STATE_UNORDERED_ACCESS),
+                CD3DX12_RESOURCE_BARRIER::Transition(m_texSceneColor.Get(),
+                    D3D12_RESOURCE_STATE_RENDER_TARGET, D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE)
+            };
+            commandList->ResourceBarrier(_countof(barriers), barriers);
+
+            commandList->SetComputeRootSignature(m_sigBlurCS.Get());
+            commandList->SetPipelineState(m_psoBlurCSX.Get());
+            commandList->SetComputeRootDescriptorTable((UINT)CSBLUR_SIG_PARAMS::SCENE_COLOR_TEX, m_srvSceneColorGpu);
+            commandList->SetComputeRootDescriptorTable((UINT)CSBLUR_SIG_PARAMS::OUTPUT_UAV, m_uavSceneColorGpu2);
+            
+            UINT nGroupX = (UINT)std::ceil(m_viewport.Width / GROUP_SIZE);
+            UINT nGroupY = (UINT)m_viewport.Height;
+
+            commandList->Dispatch(nGroupX, nGroupY, 1);
+
+            D3D12_RESOURCE_BARRIER barriers2[] = {
+                CD3DX12_RESOURCE_BARRIER::Transition(m_texSceneColor2.Get(),
+                    D3D12_RESOURCE_STATE_UNORDERED_ACCESS, D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE),
+                CD3DX12_RESOURCE_BARRIER::Transition(m_texSceneColor.Get(),
+                    D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE, D3D12_RESOURCE_STATE_UNORDERED_ACCESS)
+            };
+            commandList->ResourceBarrier(_countof(barriers2), barriers2);
+            
+            commandList->SetComputeRootDescriptorTable((UINT)CSBLUR_SIG_PARAMS::SCENE_COLOR_TEX, m_srvSceneColorGpu2);
+            commandList->SetComputeRootDescriptorTable((UINT)CSBLUR_SIG_PARAMS::OUTPUT_UAV, m_uavSceneColorGpu);
+            
+            nGroupX = (UINT)m_viewport.Width;
+            nGroupY = (UINT)std::ceil(m_viewport.Height / GROUP_SIZE);
+
+            commandList->Dispatch(nGroupX, nGroupY, 1);
+
+            D3D12_RESOURCE_BARRIER barriers3[] = {
+                CD3DX12_RESOURCE_BARRIER::Transition(m_pCurrentFrameResource->backBuffer,
+                    D3D12_RESOURCE_STATE_PRESENT, D3D12_RESOURCE_STATE_COPY_DEST),
+                CD3DX12_RESOURCE_BARRIER::Transition(m_texSceneColor.Get(),
+                    D3D12_RESOURCE_STATE_UNORDERED_ACCESS, D3D12_RESOURCE_STATE_COPY_SOURCE)
+            };
+            commandList->ResourceBarrier(_countof(barriers3), barriers3);
+
+            commandList->CopyResource(m_pCurrentFrameResource->backBuffer, m_texSceneColor.Get());
+
+            D3D12_RESOURCE_BARRIER barriers4[] = {
+                CD3DX12_RESOURCE_BARRIER::Transition(m_pCurrentFrameResource->backBuffer,
+                    D3D12_RESOURCE_STATE_COPY_DEST, D3D12_RESOURCE_STATE_PRESENT),
+                CD3DX12_RESOURCE_BARRIER::Transition(m_texSceneColor.Get(),
+                    D3D12_RESOURCE_STATE_COPY_SOURCE, D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE)
+            };
+            commandList->ResourceBarrier(_countof(barriers4), barriers4);
         }
         break;
 
@@ -1203,9 +1356,7 @@ void D3D12PostprocessBlur::RenderPostprocess()
         break;
     }
 
-    commandList->ResourceBarrier(1, &CD3DX12_RESOURCE_BARRIER::Transition(
-        m_pCurrentFrameResource->backBuffer,
-        D3D12_RESOURCE_STATE_RENDER_TARGET, D3D12_RESOURCE_STATE_PRESENT));
+
 
     PIXEndEvent(commandList);
 }
