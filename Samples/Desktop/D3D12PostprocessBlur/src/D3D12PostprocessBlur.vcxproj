@@ -157,7 +157,29 @@
       <DisableOptimizations>true</DisableOptimizations>
       <EnableDebuggingInformation>true</EnableDebuggingInformation>
       <ShaderType>Compute</ShaderType>
-    </FxCompile>    
+    </FxCompile>
+    <FxCompile Include="PostprocessBlurSeparateCSCombined.hlsl">
+      <ObjectFileOutput>bin\x64\Debug\CSPostprocessBlurXCombined.cso</ObjectFileOutput>
+      <TrackerLogDirectory>obj\x64\Debug\D3D12Pos.3FC193D0.tlog\</TrackerLogDirectory>
+      <EntryPointName>CSPostprocessBlurXCombined</EntryPointName>
+      <SuppressStartupBanner>true</SuppressStartupBanner>
+      <ShaderModel>6.0</ShaderModel>
+      <MinimalRebuildFromTracking>true</MinimalRebuildFromTracking>
+      <DisableOptimizations>true</DisableOptimizations>
+      <EnableDebuggingInformation>true</EnableDebuggingInformation>
+      <ShaderType>Compute</ShaderType>
+    </FxCompile>
+    <FxCompile Include="PostprocessBlurSeparateCSCombined.hlsl">
+      <ObjectFileOutput>bin\x64\Debug\CSPostprocessBlurYCombined.cso</ObjectFileOutput>
+      <TrackerLogDirectory>obj\x64\Debug\D3D12Pos.3FC193D0.tlog\</TrackerLogDirectory>
+      <EntryPointName>CSPostprocessBlurYCombined</EntryPointName>
+      <SuppressStartupBanner>true</SuppressStartupBanner>
+      <ShaderModel>6.0</ShaderModel>
+      <MinimalRebuildFromTracking>true</MinimalRebuildFromTracking>
+      <DisableOptimizations>true</DisableOptimizations>
+      <EnableDebuggingInformation>true</EnableDebuggingInformation>
+      <ShaderType>Compute</ShaderType>
+    </FxCompile>
     <FxCompile Include="ShadingVS.hlsl">
       <ShaderType>Vertex</ShaderType>
       <ShaderModel>6.0</ShaderModel>

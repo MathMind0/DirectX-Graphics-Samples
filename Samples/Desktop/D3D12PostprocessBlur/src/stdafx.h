@@ -41,6 +41,7 @@ static const UINT NumContexts = 3;
 static const UINT NumLights = 3;        // Keep this in sync with "shaders.hlsl".
 
 static const UINT GROUP_SIZE = 64;
+static const UINT LINES = 8;
 
 static const UINT TitleThrottle = 200;    // Only update the titlebar every X number of frames.
 

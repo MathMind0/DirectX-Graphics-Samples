@@ -56,6 +56,7 @@ enum class BLUR_METHOD : UINT
     BLUR_NAIVE,
     BLUR_SEPARATE,
     BLUR_COMPUTE,
+    BLUR_COMPUTE_COMBINED,
     NUM_BLUR_METHOD
 };
 
@@ -169,6 +170,8 @@ private:
     ComPtr<ID3D12RootSignature> m_sigBlurCS;
     ComPtr<ID3D12PipelineState> m_psoBlurCSX;
     ComPtr<ID3D12PipelineState> m_psoBlurCSY;
+    ComPtr<ID3D12PipelineState> m_psoBlurCSXCombined;
+    ComPtr<ID3D12PipelineState> m_psoBlurCSYCombined;
     BLUR_METHOD m_blurMethod;
 
     // App data
@@ -221,6 +224,10 @@ private:
     void BeginFrame();
     void RenderShadow();
     void RenderScene();
+    void RenderBlurNaive();
+    void RenderBlurSeparate();
+    void RenderBlurCompute();
+    void RenderBlurComputeCombined();
     void RenderPostprocess();
     void EndFrame();
     

@@ -2,7 +2,7 @@
 static const float weight[] = {0.0002, 0.0060, 0.0606, 0.2417, 0.3829, 0.2417, 0.0606, 0.0060, 0.0002};
 
 #define GROUP_SIZE 64
-#define CACHE_SIZE GROUP_SIZE + 2 * BLUR_RADIUS
+#define CACHE_SIZE ((GROUP_SIZE) + (2 * (BLUR_RADIUS)))
 
 Texture2D texSceneColor : register(t0);
 RWTexture2D<float4> gTexOutput : register(u0);
