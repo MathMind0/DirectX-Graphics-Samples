@@ -427,14 +427,14 @@ void D3D12PostprocessBlur::CreateDepthBuffer()
             static_cast<UINT>(m_viewport.Height), 
             1,
             1,
-            DXGI_FORMAT_D32_FLOAT,
+            DXGI_FORMAT_D16_UNORM,
             1, 
             0,
             D3D12_TEXTURE_LAYOUT_UNKNOWN,
             D3D12_RESOURCE_FLAG_ALLOW_DEPTH_STENCIL | D3D12_RESOURCE_FLAG_DENY_SHADER_RESOURCE);
 
     D3D12_CLEAR_VALUE clearValue;    // Performance tip: Tell the runtime at resource creation the desired clear value.
-    clearValue.Format = DXGI_FORMAT_D32_FLOAT;
+    clearValue.Format = DXGI_FORMAT_D16_UNORM;
     clearValue.DepthStencil.Depth = 1.0f;
     clearValue.DepthStencil.Stencil = 0;
 

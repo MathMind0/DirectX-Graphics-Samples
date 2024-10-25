@@ -137,108 +137,124 @@
       <FileType>Document</FileType>      
     </CustomBuild>
     <FxCompile Include="PostprocessBlurSeparateCS.hlsl">
-      <ObjectFileOutput>bin\x64\Debug\CSPostprocessBlurX.cso</ObjectFileOutput>
-      <TrackerLogDirectory>obj\x64\Debug\D3D12Pos.3FC193D0.tlog\</TrackerLogDirectory>
       <EntryPointName>CSPostprocessBlurX</EntryPointName>
-      <SuppressStartupBanner>true</SuppressStartupBanner>
-      <ShaderModel>6.0</ShaderModel>
-      <MinimalRebuildFromTracking>true</MinimalRebuildFromTracking>
-      <DisableOptimizations>true</DisableOptimizations>
-      <EnableDebuggingInformation>true</EnableDebuggingInformation>
       <ShaderType>Compute</ShaderType>
+      <ShaderModel>6.0</ShaderModel>
+      <EnableDebuggingInformation>true</EnableDebuggingInformation>
+      <SuppressStartupBanner>true</SuppressStartupBanner>
+      <MinimalRebuildFromTracking>true</MinimalRebuildFromTracking>
+      <ObjectFileOutput Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">bin\x64\Debug\CSPostprocessBlurX.cso</ObjectFileOutput>
+      <ObjectFileOutput Condition="'$(Configuration)|$(Platform)'=='Release|x64'">bin\x64\Release\CSPostprocessBlurX.cso</ObjectFileOutput>
+      <DisableOptimizations Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">true</DisableOptimizations>
+      <DisableOptimizations Condition="'$(Configuration)|$(Platform)'=='Release|x64'">false</DisableOptimizations>
     </FxCompile>
     <FxCompile Include="PostprocessBlurSeparateCS.hlsl">
-      <ObjectFileOutput>bin\x64\Debug\CSPostprocessBlurY.cso</ObjectFileOutput>
-      <TrackerLogDirectory>obj\x64\Debug\D3D12Pos.3FC193D0.tlog\</TrackerLogDirectory>
       <EntryPointName>CSPostprocessBlurY</EntryPointName>
-      <SuppressStartupBanner>true</SuppressStartupBanner>
-      <ShaderModel>6.0</ShaderModel>
-      <MinimalRebuildFromTracking>true</MinimalRebuildFromTracking>
-      <DisableOptimizations>true</DisableOptimizations>
-      <EnableDebuggingInformation>true</EnableDebuggingInformation>
       <ShaderType>Compute</ShaderType>
+      <ShaderModel>6.0</ShaderModel>
+      <EnableDebuggingInformation>true</EnableDebuggingInformation>
+      <SuppressStartupBanner>true</SuppressStartupBanner>
+      <MinimalRebuildFromTracking>true</MinimalRebuildFromTracking>
+      <ObjectFileOutput Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">bin\x64\Debug\CSPostprocessBlurY.cso</ObjectFileOutput>
+      <ObjectFileOutput Condition="'$(Configuration)|$(Platform)'=='Release|x64'">bin\x64\Release\CSPostprocessBlurY.cso</ObjectFileOutput>
+      <DisableOptimizations Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">true</DisableOptimizations>
+      <DisableOptimizations Condition="'$(Configuration)|$(Platform)'=='Release|x64'">false</DisableOptimizations>
     </FxCompile>
     <FxCompile Include="PostprocessBlurSeparateCSCombined.hlsl">
-      <ObjectFileOutput>bin\x64\Debug\CSPostprocessBlurXCombined.cso</ObjectFileOutput>
-      <TrackerLogDirectory>obj\x64\Debug\D3D12Pos.3FC193D0.tlog\</TrackerLogDirectory>
       <EntryPointName>CSPostprocessBlurXCombined</EntryPointName>
-      <SuppressStartupBanner>true</SuppressStartupBanner>
-      <ShaderModel>6.0</ShaderModel>
-      <MinimalRebuildFromTracking>true</MinimalRebuildFromTracking>
-      <DisableOptimizations>true</DisableOptimizations>
-      <EnableDebuggingInformation>true</EnableDebuggingInformation>
       <ShaderType>Compute</ShaderType>
+      <ShaderModel>6.0</ShaderModel>
+      <EnableDebuggingInformation>true</EnableDebuggingInformation>
+      <SuppressStartupBanner>true</SuppressStartupBanner>
+      <MinimalRebuildFromTracking>true</MinimalRebuildFromTracking>
+      <ObjectFileOutput Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">bin\x64\Debug\CSPostprocessBlurXCombined.cso</ObjectFileOutput>
+      <ObjectFileOutput Condition="'$(Configuration)|$(Platform)'=='Release|x64'">bin\x64\Release\CSPostprocessBlurXCombined.cso</ObjectFileOutput>
+      <DisableOptimizations Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">true</DisableOptimizations>
+      <DisableOptimizations Condition="'$(Configuration)|$(Platform)'=='Release|x64'">false</DisableOptimizations>
     </FxCompile>
     <FxCompile Include="PostprocessBlurSeparateCSCombined.hlsl">
-      <ObjectFileOutput>bin\x64\Debug\CSPostprocessBlurYCombined.cso</ObjectFileOutput>
-      <TrackerLogDirectory>obj\x64\Debug\D3D12Pos.3FC193D0.tlog\</TrackerLogDirectory>
       <EntryPointName>CSPostprocessBlurYCombined</EntryPointName>
-      <SuppressStartupBanner>true</SuppressStartupBanner>
-      <ShaderModel>6.0</ShaderModel>
-      <MinimalRebuildFromTracking>true</MinimalRebuildFromTracking>
-      <DisableOptimizations>true</DisableOptimizations>
-      <EnableDebuggingInformation>true</EnableDebuggingInformation>
       <ShaderType>Compute</ShaderType>
+      <ShaderModel>6.0</ShaderModel>
+      <EnableDebuggingInformation>true</EnableDebuggingInformation>
+      <SuppressStartupBanner>true</SuppressStartupBanner>
+      <MinimalRebuildFromTracking>true</MinimalRebuildFromTracking>
+      <ObjectFileOutput Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">bin\x64\Debug\CSPostprocessBlurYCombined.cso</ObjectFileOutput>
+      <ObjectFileOutput Condition="'$(Configuration)|$(Platform)'=='Release|x64'">bin\x64\Release\CSPostprocessBlurYCombined.cso</ObjectFileOutput>
+      <DisableOptimizations Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">true</DisableOptimizations>
+      <DisableOptimizations Condition="'$(Configuration)|$(Platform)'=='Release|x64'">false</DisableOptimizations>
     </FxCompile>
     <FxCompile Include="ShadingVS.hlsl">
+      <EntryPointName>VSMain</EntryPointName>
       <ShaderType>Vertex</ShaderType>
       <ShaderModel>6.0</ShaderModel>
-      <EntryPointName>VSMain</EntryPointName>
-      <ObjectFileOutput>bin\x64\Debug\%(Filename).cso</ObjectFileOutput>
-      <DisableOptimizations>true</DisableOptimizations>
       <EnableDebuggingInformation>true</EnableDebuggingInformation>
       <SuppressStartupBanner>true</SuppressStartupBanner>
-      <TrackerLogDirectory>obj\x64\Debug\D3D12Pos.3FC193D0.tlog\</TrackerLogDirectory>
+      <MinimalRebuildFromTracking>true</MinimalRebuildFromTracking>
+      <ObjectFileOutput Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">bin\x64\Debug\%(Filename).cso</ObjectFileOutput>
+      <ObjectFileOutput Condition="'$(Configuration)|$(Platform)'=='Release|x64'">bin\x64\Release\%(Filename).cso</ObjectFileOutput>
+      <DisableOptimizations Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">true</DisableOptimizations>
+      <DisableOptimizations Condition="'$(Configuration)|$(Platform)'=='Release|x64'">false</DisableOptimizations>      
     </FxCompile>
     <FxCompile Include="ShadingPS.hlsl">
+      <EntryPointName>PSMain</EntryPointName>
       <ShaderType>Pixel</ShaderType>
       <ShaderModel>6.0</ShaderModel>
-      <EntryPointName>PSMain</EntryPointName>
-      <ObjectFileOutput>bin\x64\Debug\%(Filename).cso</ObjectFileOutput>
-      <DisableOptimizations>true</DisableOptimizations>
       <EnableDebuggingInformation>true</EnableDebuggingInformation>
       <SuppressStartupBanner>true</SuppressStartupBanner>
-      <TrackerLogDirectory>obj\x64\Debug\D3D12Pos.3FC193D0.tlog\</TrackerLogDirectory>
+      <MinimalRebuildFromTracking>true</MinimalRebuildFromTracking>
+      <ObjectFileOutput Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">bin\x64\Debug\%(Filename).cso</ObjectFileOutput>
+      <ObjectFileOutput Condition="'$(Configuration)|$(Platform)'=='Release|x64'">bin\x64\Release\%(Filename).cso</ObjectFileOutput>
+      <DisableOptimizations Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">true</DisableOptimizations>
+      <DisableOptimizations Condition="'$(Configuration)|$(Platform)'=='Release|x64'">false</DisableOptimizations>
     </FxCompile>
     <FxCompile Include="PostprocessVS.hlsl">
+      <EntryPointName>VSPostprocess</EntryPointName>
       <ShaderType>Vertex</ShaderType>
       <ShaderModel>6.0</ShaderModel>
-      <EntryPointName>VSPostprocess</EntryPointName>
-      <ObjectFileOutput>bin\x64\Debug\%(Filename).cso</ObjectFileOutput>
-      <DisableOptimizations>true</DisableOptimizations>
       <EnableDebuggingInformation>true</EnableDebuggingInformation>
       <SuppressStartupBanner>true</SuppressStartupBanner>
-      <TrackerLogDirectory>obj\x64\Debug\D3D12Pos.3FC193D0.tlog\</TrackerLogDirectory>
+      <MinimalRebuildFromTracking>true</MinimalRebuildFromTracking>
+      <ObjectFileOutput Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">bin\x64\Debug\%(Filename).cso</ObjectFileOutput>
+      <ObjectFileOutput Condition="'$(Configuration)|$(Platform)'=='Release|x64'">bin\x64\Release\%(Filename).cso</ObjectFileOutput>
+      <DisableOptimizations Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">true</DisableOptimizations>
+      <DisableOptimizations Condition="'$(Configuration)|$(Platform)'=='Release|x64'">false</DisableOptimizations>
     </FxCompile>
     <FxCompile Include="PostprocessBlurPS.hlsl">
-      <ShaderType>Pixel</ShaderType>
-      <ShaderModel>6.0</ShaderModel>
       <EntryPointName>PSPostprocessBlurNaive</EntryPointName>
-      <ObjectFileOutput>bin\x64\Debug\%(Filename).cso</ObjectFileOutput>
-      <DisableOptimizations>true</DisableOptimizations>
-      <EnableDebuggingInformation>true</EnableDebuggingInformation>
-      <SuppressStartupBanner>true</SuppressStartupBanner>
-      <TrackerLogDirectory>obj\x64\Debug\D3D12Pos.3FC193D0.tlog\</TrackerLogDirectory>
-    </FxCompile>
-    <FxCompile Include="PostprocessBlurSeparatePS.hlsl">
       <ShaderType>Pixel</ShaderType>
       <ShaderModel>6.0</ShaderModel>
+      <EnableDebuggingInformation>true</EnableDebuggingInformation>
+      <SuppressStartupBanner>true</SuppressStartupBanner>
+      <MinimalRebuildFromTracking>true</MinimalRebuildFromTracking>
+      <ObjectFileOutput Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">bin\x64\Debug\%(Filename).cso</ObjectFileOutput>
+      <ObjectFileOutput Condition="'$(Configuration)|$(Platform)'=='Release|x64'">bin\x64\Release\%(Filename).cso</ObjectFileOutput>
+      <DisableOptimizations Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">true</DisableOptimizations>
+      <DisableOptimizations Condition="'$(Configuration)|$(Platform)'=='Release|x64'">false</DisableOptimizations>
+    </FxCompile>
+    <FxCompile Include="PostprocessBlurSeparatePS.hlsl">
       <EntryPointName>PSPostprocessBlurX</EntryPointName>
-      <ObjectFileOutput>bin\x64\Debug\PSPostprocessBlurX.cso</ObjectFileOutput>
-      <DisableOptimizations>true</DisableOptimizations>
-      <EnableDebuggingInformation>true</EnableDebuggingInformation>
-      <SuppressStartupBanner>true</SuppressStartupBanner>
-      <TrackerLogDirectory>obj\x64\Debug\D3D12Pos.3FC193D0.tlog\</TrackerLogDirectory>
-    </FxCompile>
-    <FxCompile Include="PostprocessBlurSeparatePS.hlsl">
       <ShaderType>Pixel</ShaderType>
       <ShaderModel>6.0</ShaderModel>
-      <EntryPointName>PSPostprocessBlurY</EntryPointName>
-      <ObjectFileOutput>bin\x64\Debug\PSPostprocessBlurY.cso</ObjectFileOutput>
-      <DisableOptimizations>true</DisableOptimizations>
       <EnableDebuggingInformation>true</EnableDebuggingInformation>
       <SuppressStartupBanner>true</SuppressStartupBanner>
-      <TrackerLogDirectory>obj\x64\Debug\D3D12Pos.3FC193D0.tlog\</TrackerLogDirectory>
+      <MinimalRebuildFromTracking>true</MinimalRebuildFromTracking>
+      <ObjectFileOutput Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">bin\x64\Debug\PSPostprocessBlurX.cso</ObjectFileOutput>
+      <ObjectFileOutput Condition="'$(Configuration)|$(Platform)'=='Release|x64'">bin\x64\Release\PSPostprocessBlurX.cso</ObjectFileOutput>
+      <DisableOptimizations Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">true</DisableOptimizations>
+      <DisableOptimizations Condition="'$(Configuration)|$(Platform)'=='Release|x64'">false</DisableOptimizations>
+    </FxCompile>
+    <FxCompile Include="PostprocessBlurSeparatePS.hlsl">
+      <EntryPointName>PSPostprocessBlurY</EntryPointName>
+      <ShaderType>Pixel</ShaderType>
+      <ShaderModel>6.0</ShaderModel>
+      <EnableDebuggingInformation>true</EnableDebuggingInformation>
+      <SuppressStartupBanner>true</SuppressStartupBanner>
+      <MinimalRebuildFromTracking>true</MinimalRebuildFromTracking>
+      <ObjectFileOutput Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">bin\x64\Debug\PSPostprocessBlurY.cso</ObjectFileOutput>
+      <ObjectFileOutput Condition="'$(Configuration)|$(Platform)'=='Release|x64'">bin\x64\Release\PSPostprocessBlurY.cso</ObjectFileOutput>
+      <DisableOptimizations Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">true</DisableOptimizations>
+      <DisableOptimizations Condition="'$(Configuration)|$(Platform)'=='Release|x64'">false</DisableOptimizations>
     </FxCompile>
   </ItemGroup>
   <ItemGroup>
