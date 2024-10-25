@@ -1,14 +1,14 @@
 #define BLUR_RADIUS 4
-static const float weight[] = {0.0002, 0.0060, 0.0606, 0.2417, 0.3829, 0.2417, 0.0606, 0.0060, 0.0002};
+static const half weight[] = {0.0002, 0.0060, 0.0606, 0.2417, 0.3829, 0.2417, 0.0606, 0.0060, 0.0002};
 
 #define GROUP_SIZE 64
 #define CACHE_SIZE ((GROUP_SIZE) + (2 * (BLUR_RADIUS)))
 #define LINES 8
 
 Texture2D texSceneColor : register(t0);
-RWTexture2D<float4> gTexOutput : register(u0);
+RWTexture2D<half4> gTexOutput : register(u0);
 
-groupshared float3 CachedColor[CACHE_SIZE * LINES];
+groupshared half3 CachedColor[CACHE_SIZE * LINES];
 
 [numthreads(GROUP_SIZE, 1, 1)]
 void CSPostprocessBlurXCombined(int3 groupThreadID : SV_GroupThreadID, int3 dispatchThreadID : SV_DispatchThreadID)
@@ -47,14 +47,14 @@ void CSPostprocessBlurXCombined(int3 groupThreadID : SV_GroupThreadID, int3 disp
     [unroll]
     for (row = 0; row < LINES; ++row)
     {
-        float4 color = 0.0;
+        half3 color = 0.0;
         [unroll]
         for (int i = 0; i <= 2 * BLUR_RADIUS; i++)
         {        
-            color.rgb += CachedColor[groupThreadID.x + i + row * CACHE_SIZE] * weight[i];
+            color += CachedColor[groupThreadID.x + i + row * CACHE_SIZE] * weight[i];
         }
 
-        gTexOutput[int2(dispatchThreadID.x, dispatchThreadID.y * LINES + row)] = color;
+        gTexOutput[int2(dispatchThreadID.x, dispatchThreadID.y * LINES + row)] = half4(color, 0.0);
     }
 }
 
@@ -94,13 +94,13 @@ void CSPostprocessBlurYCombined(int3 groupThreadID : SV_GroupThreadID, int3 disp
     [unroll]
     for (col = 0; col < LINES; ++col)
     {
-        float4 color = 0.0;
+        half3 color = 0.0;
         [unroll]
         for (int i = 0; i <= 2 * BLUR_RADIUS; i++)
         {        
-            color.rgb += CachedColor[groupThreadID.y + i + col * CACHE_SIZE] * weight[i];
+            color += CachedColor[groupThreadID.y + i + col * CACHE_SIZE] * weight[i];
         }
 
-        gTexOutput[int2(dispatchThreadID.x * LINES + col, dispatchThreadID.y)] = color;
+        gTexOutput[int2(dispatchThreadID.x * LINES + col, dispatchThreadID.y)] = half4(color, 0.0);
     }    
 }

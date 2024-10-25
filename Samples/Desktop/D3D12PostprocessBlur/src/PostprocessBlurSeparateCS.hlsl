@@ -1,13 +1,13 @@
 #define BLUR_RADIUS 4
-static const float weight[] = {0.0002, 0.0060, 0.0606, 0.2417, 0.3829, 0.2417, 0.0606, 0.0060, 0.0002};
+static const half weight[] = {0.0002, 0.0060, 0.0606, 0.2417, 0.3829, 0.2417, 0.0606, 0.0060, 0.0002};
 
 #define GROUP_SIZE 64
 #define CACHE_SIZE ((GROUP_SIZE) + (2 * (BLUR_RADIUS)))
 
 Texture2D texSceneColor : register(t0);
-RWTexture2D<float4> gTexOutput : register(u0);
+RWTexture2D<half4> gTexOutput : register(u0);
 
-groupshared float3 CachedColor[CACHE_SIZE];
+groupshared half3 CachedColor[CACHE_SIZE];
 
 [numthreads(GROUP_SIZE, 1, 1)]
 void CSPostprocessBlurX(int3 groupThreadID : SV_GroupThreadID, int3 dispatchThreadID : SV_DispatchThreadID)
@@ -28,14 +28,14 @@ void CSPostprocessBlurX(int3 groupThreadID : SV_GroupThreadID, int3 dispatchThre
 
     GroupMemoryBarrierWithGroupSync();
     
-    float4 color = 0.0;
-    [unroll]
+    half3 color = 0.0;
+    //[unroll]
     for (int i = 0; i <= 2 * BLUR_RADIUS; i++)
     {        
-        color.rgb += CachedColor[groupThreadID.x + i] * weight[i];
+        color += CachedColor[groupThreadID.x + i] * weight[i];
     }
 
-    gTexOutput[dispatchThreadID.xy] = color;
+    gTexOutput[dispatchThreadID.xy] = half4(color, 0.0);
 }
 
 [numthreads(1, GROUP_SIZE, 1)]
@@ -57,12 +57,12 @@ void CSPostprocessBlurY(int3 groupThreadID : SV_GroupThreadID, int3 dispatchThre
 
     GroupMemoryBarrierWithGroupSync();
     
-    float4 color = 0.0;
-    [unroll]
+    half3 color = 0.0;
+    //[unroll]
     for (int i = 0; i <= 2 * BLUR_RADIUS; i++)
     {        
-        color.rgb += CachedColor[groupThreadID.y + i] * weight[i];
+        color += CachedColor[groupThreadID.y + i] * weight[i];
     }
 
-    gTexOutput[dispatchThreadID.xy] = color;
+    gTexOutput[dispatchThreadID.xy] = half4(color, 0.0);
 }
