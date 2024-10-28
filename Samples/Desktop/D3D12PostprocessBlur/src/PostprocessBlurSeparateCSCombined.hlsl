@@ -48,7 +48,7 @@ void CSPostprocessBlurXCombined(int3 groupThreadID : SV_GroupThreadID, int3 disp
     for (row = 0; row < LINES; ++row)
     {
         half3 color = 0.0;
-        //[unroll]
+        [unroll]
         for (int i = 0; i <= 2 * BLUR_RADIUS; i++)
         {        
             color += CachedColor[groupThreadID.x + i + row * CACHE_SIZE] * weight[i];
@@ -95,7 +95,7 @@ void CSPostprocessBlurYCombined(int3 groupThreadID : SV_GroupThreadID, int3 disp
     for (col = 0; col < LINES; ++col)
     {
         half3 color = 0.0;
-        //[unroll]
+        [unroll]
         for (int i = 0; i <= 2 * BLUR_RADIUS; i++)
         {        
             color += CachedColor[groupThreadID.y + i + col * CACHE_SIZE] * weight[i];
