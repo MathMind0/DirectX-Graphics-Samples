@@ -1316,7 +1316,11 @@ void D3D12PostprocessBlur::RenderBlurCompute()
     UINT nGroupX = (UINT)std::ceil(m_viewport.Width / GROUP_SIZE);
     UINT nGroupY = (UINT)m_viewport.Height;
 
+#if USE_DIRECT_INDEX
     commandList->Dispatch(nGroupX, nGroupY, 1);
+#else
+    commandList->Dispatch(nGroupY, nGroupX, 1);
+#endif    
 
     D3D12_RESOURCE_BARRIER barriers2[] = {
         CD3DX12_RESOURCE_BARRIER::Transition(m_texSceneColor2.Get(),
@@ -1335,7 +1339,7 @@ void D3D12PostprocessBlur::RenderBlurCompute()
     nGroupY = (UINT)std::ceil(m_viewport.Height / GROUP_SIZE);
 
     commandList->Dispatch(nGroupX, nGroupY, 1);
-
+    
     D3D12_RESOURCE_BARRIER barriers3[] = {
         CD3DX12_RESOURCE_BARRIER::Transition(m_pCurrentFrameResource->backBuffer,
             D3D12_RESOURCE_STATE_PRESENT, D3D12_RESOURCE_STATE_COPY_DEST),
@@ -1376,7 +1380,11 @@ void D3D12PostprocessBlur::RenderBlurComputeCombined()
     UINT nGroupX = (UINT)std::ceil(m_viewport.Width / GROUP_SIZE);
     UINT nGroupY = (UINT)std::ceil(m_viewport.Height / LINES);
 
+#if USE_DIRECT_INDEX
     commandList->Dispatch(nGroupX, nGroupY, 1);
+#else
+    commandList->Dispatch(nGroupY, nGroupX, 1);
+#endif   
 
     D3D12_RESOURCE_BARRIER barriers2[] = {
         CD3DX12_RESOURCE_BARRIER::Transition(m_texSceneColor2.Get(),
