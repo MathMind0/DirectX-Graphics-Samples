@@ -45,7 +45,7 @@ static const UINT NumLights = 3;        // Keep this in sync with "shaders.hlsl"
 static const UINT GROUP_SIZE = 64;
 static const UINT LINES = 2;
 
-static const UINT BLOCK_SIZE = 8;
+static const UINT BLOCK_SIZE = 16;
 
 #define USE_DIRECT_INDEX 0
 

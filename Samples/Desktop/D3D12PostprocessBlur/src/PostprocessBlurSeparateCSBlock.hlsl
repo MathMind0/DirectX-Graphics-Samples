@@ -1,8 +1,8 @@
 #define BLUR_RADIUS 4
 static const half weight[] = {0.0002, 0.0060, 0.0606, 0.2417, 0.3829, 0.2417, 0.0606, 0.0060, 0.0002};
 
-#define BLOCK_SIZE 8
-#define USE_AUTO_UNROLL 0
+#define BLOCK_SIZE 16
+#define USE_AUTO_UNROLL 1
 
 Texture2D texSceneColor : register(t0);
 RWTexture2D<half4> gTexOutput : register(u0);
@@ -12,7 +12,7 @@ void CSPostprocessBlurXBlock(int3 groupThreadID : SV_GroupThreadID, int3 dispatc
 {
     half3 color = 0.0;
 #if USE_AUTO_UNROLL
-    [unroll]
+    //[unroll]
     for (int i = 0; i <= 2 * BLUR_RADIUS; i++)
     {
         color += texSceneColor[int2(dispatchThreadID.x - BLUR_RADIUS + i, dispatchThreadID.y)].rgb * weight[i];
@@ -35,7 +35,7 @@ void CSPostprocessBlurYBlock(int3 groupThreadID : SV_GroupThreadID, int3 dispatc
     half3 color = 0.0;
     
 #if USE_AUTO_UNROLL
-    [unroll]
+    //[unroll]
     for (int i = 0; i <= 2 * BLUR_RADIUS; i++)
     {
         color += texSceneColor[int2(dispatchThreadID.x, dispatchThreadID.y - BLUR_RADIUS + i)].rgb * weight[i];
