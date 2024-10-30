@@ -416,6 +416,18 @@ void D3D12PostprocessBlur::CreateScenePSOs()
     descCS.CS = {ps.code, ps.size};
     ThrowIfFailed(m_device->CreateComputePipelineState(&descCS, IID_PPV_ARGS(&m_psoBlurCSYCombined)));
     NAME_D3D12_OBJECT(m_psoBlurCSYCombined);
+
+    ReadDataFromFile(GetAssetFullPath(L"CSPostprocessBlurXBlock.cso").c_str(),
+        &ps.code, &ps.size);
+    descCS.CS = {ps.code, ps.size};
+    ThrowIfFailed(m_device->CreateComputePipelineState(&descCS, IID_PPV_ARGS(&m_psoBlurCSXBlock)));
+    NAME_D3D12_OBJECT(m_psoBlurCSXBlock);
+
+    ReadDataFromFile(GetAssetFullPath(L"CSPostprocessBlurYBlock.cso").c_str(),
+        &ps.code, &ps.size);
+    descCS.CS = {ps.code, ps.size};
+    ThrowIfFailed(m_device->CreateComputePipelineState(&descCS, IID_PPV_ARGS(&m_psoBlurCSYBlock)));
+    NAME_D3D12_OBJECT(m_psoBlurCSYBlock);
 }
 
 void D3D12PostprocessBlur::CreateDepthBuffer()
@@ -1423,6 +1435,63 @@ void D3D12PostprocessBlur::RenderBlurComputeCombined()
     commandList->ResourceBarrier(_countof(barriers4), barriers4);
 }
 
+void D3D12PostprocessBlur::RenderBlurComputeBlock()
+{
+    ID3D12GraphicsCommandList* commandList = m_pCurrentFrameResource->commandList.Get();
+    
+    D3D12_RESOURCE_BARRIER barriers[] = {
+        CD3DX12_RESOURCE_BARRIER::Transition(m_texSceneColor2.Get(),
+            D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE, D3D12_RESOURCE_STATE_UNORDERED_ACCESS),
+        CD3DX12_RESOURCE_BARRIER::Transition(m_texSceneColor.Get(),
+            D3D12_RESOURCE_STATE_RENDER_TARGET, D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE)
+    };
+    
+    commandList->ResourceBarrier(_countof(barriers), barriers);
+
+    commandList->SetComputeRootSignature(m_sigBlurCS.Get());
+    commandList->SetPipelineState(m_psoBlurCSXBlock.Get());
+    commandList->SetComputeRootDescriptorTable((UINT)CSBLUR_SIG_PARAMS::SCENE_COLOR_TEX, m_srvSceneColorGpu);
+    commandList->SetComputeRootDescriptorTable((UINT)CSBLUR_SIG_PARAMS::OUTPUT_UAV, m_uavSceneColorGpu2);
+            
+    UINT nGroupX = (UINT)std::ceil(m_viewport.Width / BLOCK_SIZE);
+    UINT nGroupY = (UINT)std::ceil(m_viewport.Height / BLOCK_SIZE);
+
+    commandList->Dispatch(nGroupX, nGroupY, 1);
+
+    D3D12_RESOURCE_BARRIER barriers2[] = {
+        CD3DX12_RESOURCE_BARRIER::Transition(m_texSceneColor2.Get(),
+            D3D12_RESOURCE_STATE_UNORDERED_ACCESS, D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE),
+        CD3DX12_RESOURCE_BARRIER::Transition(m_texSceneColor.Get(),
+            D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE, D3D12_RESOURCE_STATE_UNORDERED_ACCESS)
+    };
+    commandList->ResourceBarrier(_countof(barriers2), barriers2);
+
+    commandList->SetComputeRootSignature(m_sigBlurCS.Get());
+    commandList->SetPipelineState(m_psoBlurCSYBlock.Get());
+    commandList->SetComputeRootDescriptorTable((UINT)CSBLUR_SIG_PARAMS::SCENE_COLOR_TEX, m_srvSceneColorGpu2);
+    commandList->SetComputeRootDescriptorTable((UINT)CSBLUR_SIG_PARAMS::OUTPUT_UAV, m_uavSceneColorGpu);
+
+    commandList->Dispatch(nGroupX, nGroupY, 1);
+    
+    D3D12_RESOURCE_BARRIER barriers3[] = {
+        CD3DX12_RESOURCE_BARRIER::Transition(m_pCurrentFrameResource->backBuffer,
+            D3D12_RESOURCE_STATE_PRESENT, D3D12_RESOURCE_STATE_COPY_DEST),
+        CD3DX12_RESOURCE_BARRIER::Transition(m_texSceneColor.Get(),
+            D3D12_RESOURCE_STATE_UNORDERED_ACCESS, D3D12_RESOURCE_STATE_COPY_SOURCE)
+    };
+    commandList->ResourceBarrier(_countof(barriers3), barriers3);
+
+    commandList->CopyResource(m_pCurrentFrameResource->backBuffer, m_texSceneColor.Get());
+
+    D3D12_RESOURCE_BARRIER barriers4[] = {
+        CD3DX12_RESOURCE_BARRIER::Transition(m_pCurrentFrameResource->backBuffer,
+            D3D12_RESOURCE_STATE_COPY_DEST, D3D12_RESOURCE_STATE_PRESENT),
+        CD3DX12_RESOURCE_BARRIER::Transition(m_texSceneColor.Get(),
+            D3D12_RESOURCE_STATE_COPY_SOURCE, D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE)
+    };
+    commandList->ResourceBarrier(_countof(barriers4), barriers4);
+}
+
 void D3D12PostprocessBlur::RenderPostprocess()
 {
     ID3D12GraphicsCommandList* commandList = m_pCurrentFrameResource->commandList.Get();
@@ -1460,6 +1529,12 @@ void D3D12PostprocessBlur::RenderPostprocess()
     case BLUR_METHOD::BLUR_COMPUTE_COMBINED:
         {
             RenderBlurComputeCombined();
+        }
+        break;
+
+    case BLUR_METHOD::BLUR_COMPUTE_BLOCK:
+        {
+            RenderBlurComputeBlock();
         }
         break;
         
@@ -1569,6 +1644,9 @@ void D3D12PostprocessBlur::OnKeyDown(UINT8 key)
         break;
     case 0x34: // '4'
         m_blurMethod = BLUR_METHOD::BLUR_COMPUTE_COMBINED;
+        break;
+    case 0x35: // '5'
+        m_blurMethod = BLUR_METHOD::BLUR_COMPUTE_BLOCK;
         break;
     }
 }

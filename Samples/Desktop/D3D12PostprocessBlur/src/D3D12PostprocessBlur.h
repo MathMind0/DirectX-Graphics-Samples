@@ -57,6 +57,7 @@ enum class BLUR_METHOD : UINT
     BLUR_SEPARATE,
     BLUR_COMPUTE,
     BLUR_COMPUTE_COMBINED,
+    BLUR_COMPUTE_BLOCK,
     NUM_BLUR_METHOD
 };
 
@@ -172,6 +173,8 @@ private:
     ComPtr<ID3D12PipelineState> m_psoBlurCSY;
     ComPtr<ID3D12PipelineState> m_psoBlurCSXCombined;
     ComPtr<ID3D12PipelineState> m_psoBlurCSYCombined;
+    ComPtr<ID3D12PipelineState> m_psoBlurCSXBlock;
+    ComPtr<ID3D12PipelineState> m_psoBlurCSYBlock;
     BLUR_METHOD m_blurMethod;
 
     // App data
@@ -228,6 +231,7 @@ private:
     void RenderBlurSeparate();
     void RenderBlurCompute();
     void RenderBlurComputeCombined();
+    void RenderBlurComputeBlock();
     void RenderPostprocess();
     void EndFrame();
     

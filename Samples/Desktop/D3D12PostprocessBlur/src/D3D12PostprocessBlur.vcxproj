@@ -160,6 +160,30 @@
       <DisableOptimizations Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">true</DisableOptimizations>
       <DisableOptimizations Condition="'$(Configuration)|$(Platform)'=='Release|x64'">false</DisableOptimizations>
     </FxCompile>
+    <FxCompile Include="PostprocessBlurSeparateCSBlock.hlsl">
+      <EntryPointName>CSPostprocessBlurXBlock</EntryPointName>
+      <ShaderType>Compute</ShaderType>
+      <ShaderModel>6.0</ShaderModel>
+      <EnableDebuggingInformation>true</EnableDebuggingInformation>
+      <SuppressStartupBanner>true</SuppressStartupBanner>
+      <MinimalRebuildFromTracking>true</MinimalRebuildFromTracking>
+      <ObjectFileOutput Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">bin\x64\Debug\CSPostprocessBlurXBlock.cso</ObjectFileOutput>
+      <ObjectFileOutput Condition="'$(Configuration)|$(Platform)'=='Release|x64'">bin\x64\Release\CSPostprocessBlurXBlock.cso</ObjectFileOutput>
+      <DisableOptimizations Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">true</DisableOptimizations>
+      <DisableOptimizations Condition="'$(Configuration)|$(Platform)'=='Release|x64'">false</DisableOptimizations>
+    </FxCompile>
+    <FxCompile Include="PostprocessBlurSeparateCSBlock.hlsl">
+      <EntryPointName>CSPostprocessBlurYBlock</EntryPointName>
+      <ShaderType>Compute</ShaderType>
+      <ShaderModel>6.0</ShaderModel>
+      <EnableDebuggingInformation>true</EnableDebuggingInformation>
+      <SuppressStartupBanner>true</SuppressStartupBanner>
+      <MinimalRebuildFromTracking>true</MinimalRebuildFromTracking>
+      <ObjectFileOutput Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">bin\x64\Debug\CSPostprocessBlurYBlock.cso</ObjectFileOutput>
+      <ObjectFileOutput Condition="'$(Configuration)|$(Platform)'=='Release|x64'">bin\x64\Release\CSPostprocessBlurYBlock.cso</ObjectFileOutput>
+      <DisableOptimizations Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">true</DisableOptimizations>
+      <DisableOptimizations Condition="'$(Configuration)|$(Platform)'=='Release|x64'">false</DisableOptimizations>
+    </FxCompile>
     <FxCompile Include="PostprocessBlurSeparateCSCombined.hlsl">
       <EntryPointName>CSPostprocessBlurXCombined</EntryPointName>
       <ShaderType>Compute</ShaderType>
