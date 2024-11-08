@@ -119,7 +119,7 @@ private:
     ComPtr<ID3D12Resource> m_vertexBuffer;
     D3D12_VERTEX_BUFFER_VIEW m_instanceBufferView;
     ComPtr<ID3D12Resource> m_instanceBuffer;
-    static constexpr UINT INSTANCE_NUM = 1;
+    static constexpr UINT INSTANCE_NUM = 10;
     static constexpr float INSTANCE_SCALE = 5.f;
     static constexpr float INSTANCE_DISTANCE = 10.f;    
 

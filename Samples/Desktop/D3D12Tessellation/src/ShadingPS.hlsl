@@ -52,20 +52,22 @@ float4 PSMain(PSInput input) : SV_TARGET
         totalLight += lightPass;
     }
 
-    float4 diffuseColor;
-    float height = saturate(input.worldpos.y / sceneInfo.y);
-
-    diffuseColor.r = saturate(height - 0.666667);
-    height -= diffuseColor.r;
-    diffuseColor.r *= 3.0;
-
-    diffuseColor.g = saturate(height - 0.333333);
-    height -= diffuseColor.g;
-    diffuseColor.g *= 3.0;
+    float4 diffuseColor = 0.0;
     
-    diffuseColor.b = height * 3.0;
+    float height = input.worldpos.y / (WAVE_HEIGHT * sceneInfo.y);
+    height = saturate(height * 0.5 + 0.5);
+
+#if 0
+    uint uHeight = (uint)(height * 256.0 * 256.0 * 256.0);
+    diffuseColor.r = ((uHeight & 0xFF0000) >> 16) / 255.0;
+    diffuseColor.g = ((uHeight & 0xFF00) >> 8) / 255.0;
+    diffuseColor.b = (uHeight & 0xFF) / 255.0;
+#else
+    diffuseColor.rgb = height;
+#endif
     diffuseColor.a = 1.0;
     
-    return float4(1.0, 1.0, 1.0, 1.0);
+    //return float4(1.0, 1.0, 1.0, 1.0);
+    return diffuseColor;
     //return diffuseColor * saturate(totalLight);
 }
