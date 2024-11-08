@@ -2,7 +2,7 @@
 
 VSOutput VSMain(VSInput input)
 {
-    VSOutput result = {0.0};
+    VSOutput result = (VSOutput)0;
 
     result.position = input.position;
     result.matWorld[0] = input.matWorld0;

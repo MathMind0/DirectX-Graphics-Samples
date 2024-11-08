@@ -42,17 +42,14 @@
     <ClInclude Include="stdafx.h">
       <Filter>Header Files</Filter>
     </ClInclude>
-    <ClInclude Include="D3D12Multithreading.h">
-      <Filter>Header Files</Filter>
-    </ClInclude>
-    <ClInclude Include="SquidRoom.h">
-      <Filter>Header Files\Util</Filter>
-    </ClInclude>
     <ClInclude Include="Camera.h">
       <Filter>Header Files\Util</Filter>
     </ClInclude>
     <ClInclude Include="Win32Application.h">
       <Filter>Header Files\Util</Filter>
+    </ClInclude>
+    <ClInclude Include="D3D12Tessellation.h">
+      <Filter>Header Files</Filter>
     </ClInclude>
   </ItemGroup>
   <ItemGroup>
@@ -68,25 +65,26 @@
     <ClCompile Include="DXSample.cpp">
       <Filter>Source Files\Util</Filter>
     </ClCompile>
-    <ClCompile Include="D3D12Multithreading.cpp">
-      <Filter>Source Files</Filter>
-    </ClCompile>
     <ClCompile Include="Camera.cpp">
       <Filter>Source Files\Util</Filter>
     </ClCompile>
     <ClCompile Include="Win32Application.cpp">
       <Filter>Source Files\Util</Filter>
     </ClCompile>
+    <ClCompile Include="D3D12Tessellation.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
-    <CustomBuild Include="SquidRoom.bin">
-      <Filter>Assets</Filter>
-    </CustomBuild>
-    <CustomBuild Include="shaders.hlsl">
-      <Filter>Assets\Shaders</Filter>
-    </CustomBuild>
+    <CustomBuild Include="ShadingCommon.hlsl" />
   </ItemGroup>
   <ItemGroup>
     <None Include="packages.config" />
+  </ItemGroup>
+  <ItemGroup>
+    <FxCompile Include="ShadingVS.hlsl" />
+    <FxCompile Include="ShadingHS.hlsl" />
+    <FxCompile Include="ShadingDS.hlsl" />
+    <FxCompile Include="ShadingPS.hlsl" />
   </ItemGroup>
 </Project>

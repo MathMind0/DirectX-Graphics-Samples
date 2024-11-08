@@ -15,7 +15,7 @@
 
 D3D12Tessellation* D3D12Tessellation::s_app = nullptr;
 
-D3D12Tessellation::D3D12PostprocessBlur(UINT width, UINT height, std::wstring name) :
+D3D12Tessellation::D3D12Tessellation(UINT width, UINT height, std::wstring name) :
     DXSample(width, height, name),
     m_frameIndex(0),
     m_viewport(0.0f, 0.0f, static_cast<float>(width), static_cast<float>(height)),
@@ -35,7 +35,7 @@ D3D12Tessellation::D3D12PostprocessBlur(UINT width, UINT height, std::wstring na
     ThrowIfFailed(DXGIDeclareAdapterRemovalSupport());
 }
 
-D3D12Tessellation::~D3D12PostprocessBlur()
+D3D12Tessellation::~D3D12Tessellation()
 {
     s_app = nullptr;
 }
@@ -139,13 +139,6 @@ void D3D12Tessellation::CreateRenderContext()
     {
         m_featureData.HighestVersion = D3D_ROOT_SIGNATURE_VERSION_1_0;
     }
-
-#if defined(_DEBUG)
-    // Enable better shader debugging with the graphics debugging tools.
-    m_compileFlags = D3DCOMPILE_DEBUG | D3DCOMPILE_SKIP_OPTIMIZATION;
-#else
-    m_compileFlags = D3DCOMPILE_OPTIMIZATION_LEVEL3;
-#endif
 }
 
 void D3D12Tessellation::CreateDescriptorHeaps()
@@ -166,15 +159,16 @@ void D3D12Tessellation::CreateDescriptorHeaps()
     dsvHeapDesc.Flags = D3D12_DESCRIPTOR_HEAP_FLAG_NONE;
     ThrowIfFailed(m_device->CreateDescriptorHeap(&dsvHeapDesc, IID_PPV_ARGS(&m_dsvHeap)));
 
+#if 0
     // Describe and create a shader resource view (SRV) and constant 
     // buffer view (CBV) descriptor heap.  
     D3D12_DESCRIPTOR_HEAP_DESC cbvSrvHeapDesc = {};
-    cbvSrvHeapDesc.NumDescriptors = (UINT)CSU_DESCRIPTORS::NUM_DESCRIPTORS +
-        (UINT)FRAME_CSU_DESCRIPTORS::NUM_DESCRIPTORS * FrameCount;
+    cbvSrvHeapDesc.NumDescriptors = (UINT)CSU_DESCRIPTORS::NUM_DESCRIPTORS;
     cbvSrvHeapDesc.Type = D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV;
     cbvSrvHeapDesc.Flags = D3D12_DESCRIPTOR_HEAP_FLAG_SHADER_VISIBLE;
     ThrowIfFailed(m_device->CreateDescriptorHeap(&cbvSrvHeapDesc, IID_PPV_ARGS(&m_cbvSrvHeap)));
     NAME_D3D12_OBJECT(m_cbvSrvHeap);
+
 
     // Describe and create a sampler descriptor heap.
     D3D12_DESCRIPTOR_HEAP_DESC samplerHeapDesc = {};
@@ -183,10 +177,11 @@ void D3D12Tessellation::CreateDescriptorHeaps()
     samplerHeapDesc.Flags = D3D12_DESCRIPTOR_HEAP_FLAG_SHADER_VISIBLE;
     ThrowIfFailed(m_device->CreateDescriptorHeap(&samplerHeapDesc, IID_PPV_ARGS(&m_samplerHeap)));
     NAME_D3D12_OBJECT(m_samplerHeap);
-
+#endif
+    
     m_rtvDescriptorSize = m_device->GetDescriptorHandleIncrementSize(D3D12_DESCRIPTOR_HEAP_TYPE_RTV);
     m_dsvDescriptorSize = m_device->GetDescriptorHandleIncrementSize(D3D12_DESCRIPTOR_HEAP_TYPE_DSV);
-    m_defaultDescriptorSize = m_device->GetDescriptorHandleIncrementSize(D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV);
+    //m_defaultDescriptorSize = m_device->GetDescriptorHandleIncrementSize(D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV);
 }
 
 void D3D12Tessellation::CreateFrameResources()
@@ -200,11 +195,11 @@ void D3D12Tessellation::CreateFrameResources()
         m_device->CreateRenderTargetView(backBuffer.Get(), nullptr, rtvHandle);
 
         m_frameResources[i] = new FrameResource(m_device.Get(),
-            m_cbvSrvHeap.Get(), m_defaultDescriptorSize,
             backBuffer.Get(), rtvHandle, i);
         
         m_frameResources[i]->WriteConstantBuffers(m_viewport, &m_camera,
-            m_lightCameras, m_lights, NumLights);
+            m_lightCameras, m_lights, NumLights,
+            (float)m_timer.GetTotalSeconds(), INSTANCE_SCALE);
         
         rtvHandle.Offset(1, m_rtvDescriptorSize);
 
@@ -214,7 +209,7 @@ void D3D12Tessellation::CreateFrameResources()
 
 void D3D12Tessellation::CreateSceneSignatures()
 {
-    CD3DX12_DESCRIPTOR_RANGE1 ranges[8];
+    //CD3DX12_DESCRIPTOR_RANGE1 ranges[8];
     CD3DX12_ROOT_PARAMETER1 rootParameters[8];
 
     rootParameters[(UINT)RENDER_SCENE_SIG_PARAMS::SCENE_DATA_CB].InitAsConstantBufferView(
@@ -256,10 +251,18 @@ void D3D12Tessellation::CreateScenePSOs()
     // Define the vertex input layout.
     D3D12_INPUT_ELEMENT_DESC inputElementDescs[] =
     {
-        { "POSITION", 0, DXGI_FORMAT_R32G32B32_FLOAT, 0, 0, D3D12_INPUT_CLASSIFICATION_PER_VERTEX_DATA, 0 },
-        { "MATWORLD0", 0, DXGI_FORMAT_R32G32B32_FLOAT, 1, 0, D3D12_INPUT_CLASSIFICATION_PER_INSTANCE_DATA, 1 },
-        { "MATWORLD1", 0, DXGI_FORMAT_R32G32B32_FLOAT, 1, D3D12_APPEND_ALIGNED_ELEMENT, D3D12_INPUT_CLASSIFICATION_PER_INSTANCE_DATA, 1 },
-        { "MATWORLD2", 0, DXGI_FORMAT_R32G32B32_FLOAT, 1, D3D12_APPEND_ALIGNED_ELEMENT, D3D12_INPUT_CLASSIFICATION_PER_INSTANCE_DATA, 1 }
+        { "POSITION", 0, DXGI_FORMAT_R32G32B32_FLOAT,
+            0, 0,
+            D3D12_INPUT_CLASSIFICATION_PER_VERTEX_DATA, 0 },
+        { "MATWORLD", 0, DXGI_FORMAT_R32G32B32A32_FLOAT,
+            1, 0,
+            D3D12_INPUT_CLASSIFICATION_PER_INSTANCE_DATA, 1 },
+        { "MATWORLD", 1, DXGI_FORMAT_R32G32B32A32_FLOAT,
+            1, D3D12_APPEND_ALIGNED_ELEMENT,
+            D3D12_INPUT_CLASSIFICATION_PER_INSTANCE_DATA, 1 },
+        { "MATWORLD", 2, DXGI_FORMAT_R32G32B32A32_FLOAT,
+            1, D3D12_APPEND_ALIGNED_ELEMENT,
+            D3D12_INPUT_CLASSIFICATION_PER_INSTANCE_DATA, 1 }
     };
 
     CD3DX12_DEPTH_STENCIL_DESC depthStencilDesc(D3D12_DEFAULT);
@@ -273,8 +276,8 @@ void D3D12Tessellation::CreateScenePSOs()
     psoDesc.InputLayout = {inputElementDescs, _countof(inputElementDescs)};
     psoDesc.pRootSignature = m_sigRenderScene.Get();
     psoDesc.VS = {vs.code, vs.size};
-    psoDesc.HS = {vs.code, vs.size};
-    psoDesc.DS = {vs.code, vs.size};
+    psoDesc.HS = {hs.code, hs.size};
+    psoDesc.DS = {ds.code, ds.size};
     psoDesc.PS = {ps.code, ps.size};
     psoDesc.RasterizerState = CD3DX12_RASTERIZER_DESC(D3D12_DEFAULT);
     psoDesc.RasterizerState.FillMode = D3D12_FILL_MODE_WIREFRAME;
@@ -333,10 +336,10 @@ void D3D12Tessellation::CreateSceneAssets()
     // Define the geometry for a patch.
     Vertex patchVertices[] =
     {
-        { { -1.0f, 0.f, 1.0f } },
-        { { 1.0f, 0.f, 1.0f } },
+        { { -1.0f, 0.f, -1.0f } },
         { { 1.0f, 0.f, -1.0f } },
-        { { 1.0f, 0.f, -1.0f } }
+        { { -1.0f, 0.f, 1.0f } },
+        { { 1.0f, 0.f, 1.0f } }
     };
 
     const UINT vertexBufferSize = sizeof(patchVertices);
@@ -369,8 +372,8 @@ void D3D12Tessellation::CreateSceneAssets()
     XMMATRIX matScaling = XMMatrixScaling(INSTANCE_SCALE, INSTANCE_SCALE, INSTANCE_SCALE);
     for (UINT i = 0; i < INSTANCE_NUM; ++i)
     {
-        XMMATRIX matTranslation = XMMatrixTranslation(0.f, 0.f, INSTANCE_DISTANCE * i);
-        XMMATRIX matPatch = matTranslation * matScaling;
+        XMMATRIX matTranslation = XMMatrixTranslation(0.f, 0.f, -INSTANCE_DISTANCE * i);
+        XMMATRIX matPatch = matScaling * matTranslation;
         XMStoreFloat3x4(&patchInstances[i].matWorld, matPatch); 
     }
     
@@ -400,6 +403,7 @@ void D3D12Tessellation::CreateSceneAssets()
     m_instanceBufferView.SizeInBytes = instanceBufferSize;
 }
 
+#if 0
 void D3D12Tessellation::CreateSamplers()
 {
     // Get the sampler descriptor size for the current device.
@@ -443,6 +447,7 @@ void D3D12Tessellation::CreateSamplers()
     clampSamplerDesc.MaxLOD = D3D12_FLOAT32_MAX;
     m_device->CreateSampler(&clampSamplerDesc, samplerHandle);
 }
+#endif
 
 void D3D12Tessellation::CreateLights()
 {
@@ -457,10 +462,8 @@ void D3D12Tessellation::CreateLights()
         m_lights[i].color = { 0.7f, 0.7f, 0.7f, 1.0f };
 
         XMVECTOR eye = XMLoadFloat4(&m_lights[i].position);
-        XMVECTOR at = XMVectorAdd(eye, XMLoadFloat4(&m_lights[i].direction));
-        XMVECTOR up = XMVectorSet(0.0f, 1.0f, 0.0f, 0.0f);
-
-        m_lightCameras[i].Set(eye, at, up);
+        XMVECTOR lookTo = XMLoadFloat4(&m_lights[i].direction);
+        m_lightCameras[i].Set(eye, lookTo);
     }    
 }
 
@@ -498,7 +501,7 @@ void D3D12Tessellation::CreateSceneResources()
     CreateDepthBuffer();
     CreateSceneSignatures();
     CreateScenePSOs();
-    CreateSamplers();
+    //CreateSamplers();
     CreateSceneAssets();    
     CreateLights();
 
@@ -543,34 +546,50 @@ void D3D12Tessellation::OnUpdate()
     m_cpuTimer.Tick(NULL);
     float frameTime = static_cast<float>(m_timer.GetElapsedSeconds());
     float frameChange = 2.0f * frameTime;
+    float moveDistance = MOVE_SPEED * frameTime;
 
     if (m_keyboardInput.leftArrowPressed)
-        m_camera.RotateYaw(-frameChange);
-    if (m_keyboardInput.rightArrowPressed)
         m_camera.RotateYaw(frameChange);
+    if (m_keyboardInput.rightArrowPressed)
+        m_camera.RotateYaw(-frameChange);
     if (m_keyboardInput.upArrowPressed)
         m_camera.RotatePitch(frameChange);
     if (m_keyboardInput.downArrowPressed)
         m_camera.RotatePitch(-frameChange);
+    if (m_keyboardInput.MoveForwardPressed)
+        m_camera.MoveForward(moveDistance);
+    if (m_keyboardInput.MoveBackwardPressed)
+        m_camera.MoveForward(-moveDistance);
+    if (m_keyboardInput.StrafeRightPressed)
+        m_camera.Strafe(moveDistance);
+    if (m_keyboardInput.StrafeLeftPressed)
+        m_camera.Strafe(-moveDistance);
+    if (m_keyboardInput.ElevateUpPressed)
+        m_camera.Elevate(moveDistance);
+    if (m_keyboardInput.ElevateDownPressed)
+        m_camera.Elevate(-moveDistance);
 
     if (m_keyboardInput.animate)
     {
         for (int i = 0; i < NumLights; i++)
         {
             float direction = frameChange * powf(-1.0f, static_cast<float>(i));
-            XMStoreFloat4(&m_lights[i].position, XMVector4Transform(XMLoadFloat4(&m_lights[i].position), XMMatrixRotationY(direction)));
+            XMStoreFloat4(&m_lights[i].position,
+                XMVector4Transform(XMLoadFloat4(&m_lights[i].position), XMMatrixRotationY(direction)));
 
             XMVECTOR eye = XMLoadFloat4(&m_lights[i].position);
             XMVECTOR at = XMVectorSet(0.0f, 8.0f, 0.0f, 0.0f);
-            XMStoreFloat4(&m_lights[i].direction, XMVector3Normalize(XMVectorSubtract(at, eye)));
-            XMVECTOR up = XMVectorSet(0.0f, 1.0f, 0.0f, 0.0f);
-            m_lightCameras[i].Set(eye, at, up);
+            XMVECTOR lookTo = XMVector3Normalize(XMVectorSubtract(at, eye));
+            XMStoreFloat4(&m_lights[i].direction, lookTo);            
+            m_lightCameras[i].Set(eye, lookTo);
 
-            m_lightCameras[i].Get3DViewProjMatrices(&m_lights[i].view, &m_lights[i].projection, 90.0f, static_cast<float>(m_width), static_cast<float>(m_height));
+            m_lightCameras[i].Get3DViewProjMatrices(&m_lights[i].view, &m_lights[i].projection,
+                90.0f, static_cast<float>(m_width), static_cast<float>(m_height));
         }
     }
 
-    m_pCurrentFrameResource->WriteConstantBuffers(m_viewport, &m_camera, m_lightCameras, m_lights, NumLights);
+    m_pCurrentFrameResource->WriteConstantBuffers(m_viewport, &m_camera, m_lightCameras, m_lights, NumLights,
+        (float)m_timer.GetTotalSeconds(), INSTANCE_SCALE);
 }
 
 // Render the scene.
@@ -638,8 +657,8 @@ void D3D12Tessellation::BeginFrame()
 
     PIXBeginEvent(commandList, 0, L"Rendering a Frame");
     
-    ID3D12DescriptorHeap* ppHeaps[] = { m_cbvSrvHeap.Get(), m_samplerHeap.Get() };
-    commandList->SetDescriptorHeaps(_countof(ppHeaps), ppHeaps);
+    //ID3D12DescriptorHeap* ppHeaps[] = { m_cbvSrvHeap.Get(), m_samplerHeap.Get() };
+    //commandList->SetDescriptorHeaps(_countof(ppHeaps), ppHeaps);
 }
 
 void D3D12Tessellation::EndFrame()
@@ -779,6 +798,30 @@ void D3D12Tessellation::OnKeyDown(UINT8 key)
     case VK_DOWN:
         m_keyboardInput.downArrowPressed = true;
         break;
+    case 'W':
+    case 'w':
+        m_keyboardInput.MoveForwardPressed = true;
+        break;
+    case 'S':
+    case 's':
+        m_keyboardInput.MoveBackwardPressed = true;
+        break;
+    case 'D':
+    case 'd':
+        m_keyboardInput.StrafeRightPressed = true;
+        break;
+    case 'A':
+    case 'a':
+        m_keyboardInput.StrafeLeftPressed = true;
+        break;
+    case 'E':
+    case 'e':
+        m_keyboardInput.ElevateUpPressed = true;
+        break;
+    case 'C':
+    case 'c':
+        m_keyboardInput.ElevateDownPressed = true;
+        break;         
     case VK_SPACE:
         m_keyboardInput.animate = !m_keyboardInput.animate;
         break;
@@ -801,5 +844,29 @@ void D3D12Tessellation::OnKeyUp(UINT8 key)
     case VK_DOWN:
         m_keyboardInput.downArrowPressed = false;
         break;
+    case 'W':
+    case 'w':
+        m_keyboardInput.MoveForwardPressed = false;
+        break;
+    case 'S':
+    case 's':
+        m_keyboardInput.MoveBackwardPressed = false;
+        break;
+    case 'D':
+    case 'd':
+        m_keyboardInput.StrafeRightPressed = false;
+        break;
+    case 'A':
+    case 'a':
+        m_keyboardInput.StrafeLeftPressed = false;
+        break;
+    case 'E':
+    case 'e':
+        m_keyboardInput.ElevateUpPressed = false;
+        break;
+    case 'C':
+    case 'c':
+        m_keyboardInput.ElevateDownPressed = false;
+        break;             
     }
 }

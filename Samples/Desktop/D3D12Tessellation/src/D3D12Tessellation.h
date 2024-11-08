@@ -25,10 +25,12 @@ using namespace DirectX;
 // An example of this can be found in the class method: OnDestroy().
 using Microsoft::WRL::ComPtr;
 
+#if 0
 enum class CSU_DESCRIPTORS : UINT
 {
     NUM_DESCRIPTORS
 };
+#endif
 
 enum class RTV_DESCRIPTORS : UINT
 {
@@ -80,6 +82,12 @@ private:
         bool leftArrowPressed;
         bool upArrowPressed;
         bool downArrowPressed;
+        bool MoveForwardPressed;
+        bool MoveBackwardPressed;
+        bool StrafeRightPressed;
+        bool StrafeLeftPressed;
+        bool ElevateUpPressed;
+        bool ElevateDownPressed;
         bool animate;
     };
 
@@ -94,16 +102,15 @@ private:
     ComPtr<ID3D12CommandAllocator> m_commandAllocator;
     ComPtr<ID3D12GraphicsCommandList> m_commandList;
     D3D12_FEATURE_DATA_ROOT_SIGNATURE m_featureData;
-    UINT m_compileFlags;
 
     // Descriptor Heaps
     ComPtr<ID3D12DescriptorHeap> m_rtvHeap;
     ComPtr<ID3D12DescriptorHeap> m_dsvHeap;
-    ComPtr<ID3D12DescriptorHeap> m_cbvSrvHeap;
-    ComPtr<ID3D12DescriptorHeap> m_samplerHeap;
+    //ComPtr<ID3D12DescriptorHeap> m_cbvSrvHeap;
+    //ComPtr<ID3D12DescriptorHeap> m_samplerHeap;
     UINT m_rtvDescriptorSize;
     UINT m_dsvDescriptorSize;
-    UINT m_defaultDescriptorSize;
+    //UINT m_defaultDescriptorSize;
     
     // Scene Resources
     ComPtr<ID3D12RootSignature> m_sigRenderScene;
@@ -112,10 +119,9 @@ private:
     ComPtr<ID3D12Resource> m_vertexBuffer;
     D3D12_VERTEX_BUFFER_VIEW m_instanceBufferView;
     ComPtr<ID3D12Resource> m_instanceBuffer;
-    static constexpr UINT INSTANCE_NUM = 10;
-    static constexpr float INSTANCE_SCALE = 10.f;
-    static constexpr float INSTANCE_DISTANCE = 20.f;
-    
+    static constexpr UINT INSTANCE_NUM = 1;
+    static constexpr float INSTANCE_SCALE = 5.f;
+    static constexpr float INSTANCE_DISTANCE = 10.f;    
 
     // App data
     InputState m_keyboardInput;
@@ -148,7 +154,7 @@ private:
     void CreateDescriptorHeaps();
     void CreateSceneSignatures();
     void CreateScenePSOs();
-    void CreateSamplers();
+    //void CreateSamplers();
     void CreateDepthBuffer();
     void CreateSceneAssets();
     void CreateLights();

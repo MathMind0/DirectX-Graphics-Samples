@@ -13,9 +13,9 @@
   <PropertyGroup Label="Globals">
     <ProjectGuid>{3FC193D0-7E4E-4918-8431-D67391EE4145}</ProjectGuid>
     <Keyword>Win32Proj</Keyword>
-    <RootNamespace>D3D12PostprocessBlur</RootNamespace>
-    <ProjectName>D3D12PostprocessBlur</ProjectName>
-    <WindowsTargetPlatformVersion>10.0.19041.0</WindowsTargetPlatformVersion>
+    <RootNamespace>D3D12Tessellation</RootNamespace>
+    <ProjectName>D3D12Tessellation</ProjectName>
+    <WindowsTargetPlatformVersion>10.0.22621.0</WindowsTargetPlatformVersion>
   </PropertyGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.Default.props" />
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'" Label="Configuration">
@@ -78,6 +78,9 @@
       <Outputs>$(OutDir)\%(Identity)</Outputs>
       <TreatOutputAsContent>true</TreatOutputAsContent>
     </CustomBuild>
+    <FxCompile>
+      <ShaderModel>6.0</ShaderModel>
+    </FxCompile>
   </ItemDefinitionGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
     <ClCompile>
@@ -133,7 +136,7 @@
   <ItemGroup>
     <CustomBuild Include="ShadingCommon.hlsl">
       <DeploymentContent>true</DeploymentContent>
-      <FileType>Document</FileType>      
+      <FileType>Document</FileType>
     </CustomBuild>
     <FxCompile Include="ShadingVS.hlsl">
       <EntryPointName>VSMain</EntryPointName>
@@ -145,9 +148,9 @@
       <ObjectFileOutput Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">bin\x64\Debug\%(Filename).cso</ObjectFileOutput>
       <ObjectFileOutput Condition="'$(Configuration)|$(Platform)'=='Release|x64'">bin\x64\Release\%(Filename).cso</ObjectFileOutput>
       <DisableOptimizations Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">true</DisableOptimizations>
-      <DisableOptimizations Condition="'$(Configuration)|$(Platform)'=='Release|x64'">false</DisableOptimizations>      
+      <DisableOptimizations Condition="'$(Configuration)|$(Platform)'=='Release|x64'">false</DisableOptimizations>
     </FxCompile>
-	<FxCompile Include="ShadingHS.hlsl">
+    <FxCompile Include="ShadingHS.hlsl">
       <EntryPointName>HSMain</EntryPointName>
       <ShaderType>Hull</ShaderType>
       <ShaderModel>6.0</ShaderModel>
@@ -157,9 +160,9 @@
       <ObjectFileOutput Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">bin\x64\Debug\%(Filename).cso</ObjectFileOutput>
       <ObjectFileOutput Condition="'$(Configuration)|$(Platform)'=='Release|x64'">bin\x64\Release\%(Filename).cso</ObjectFileOutput>
       <DisableOptimizations Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">true</DisableOptimizations>
-      <DisableOptimizations Condition="'$(Configuration)|$(Platform)'=='Release|x64'">false</DisableOptimizations>      
+      <DisableOptimizations Condition="'$(Configuration)|$(Platform)'=='Release|x64'">false</DisableOptimizations>
     </FxCompile>
-	<FxCompile Include="ShadingDS.hlsl">
+    <FxCompile Include="ShadingDS.hlsl">
       <EntryPointName>DSMain</EntryPointName>
       <ShaderType>Domain</ShaderType>
       <ShaderModel>6.0</ShaderModel>
@@ -169,8 +172,8 @@
       <ObjectFileOutput Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">bin\x64\Debug\%(Filename).cso</ObjectFileOutput>
       <ObjectFileOutput Condition="'$(Configuration)|$(Platform)'=='Release|x64'">bin\x64\Release\%(Filename).cso</ObjectFileOutput>
       <DisableOptimizations Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">true</DisableOptimizations>
-      <DisableOptimizations Condition="'$(Configuration)|$(Platform)'=='Release|x64'">false</DisableOptimizations>      
-    </FxCompile>	
+      <DisableOptimizations Condition="'$(Configuration)|$(Platform)'=='Release|x64'">false</DisableOptimizations>
+    </FxCompile>
     <FxCompile Include="ShadingPS.hlsl">
       <EntryPointName>PSMain</EntryPointName>
       <ShaderType>Pixel</ShaderType>

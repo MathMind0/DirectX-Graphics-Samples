@@ -18,13 +18,6 @@
 using namespace DirectX;
 using namespace Microsoft::WRL;
 
-enum class FRAME_CSU_DESCRIPTORS : UINT
-{
-    SHADOW_CBV,
-    SCENE_CBV,
-    NUM_DESCRIPTORS
-};
-
 struct LightState
 {
     XMFLOAT4 position;
@@ -38,18 +31,12 @@ struct LightState
 
 struct SceneConstantBuffer
 {
-    XMFLOAT4X4 model;
     XMFLOAT4X4 view;
     XMFLOAT4X4 projection;
+    XMFLOAT4 screenSize;
+    XMFLOAT4 sceneInfo;
     XMFLOAT4 ambientColor;
-    BOOL sampleShadowMap;
-    BOOL padding[3];        // Must be aligned to be made up of N float4s.
     LightState lights[NumLights];
-};
-
-struct ScreenInfo
-{
-    UINT size[4];
 };
 
 struct FrameResource
@@ -61,28 +48,20 @@ public:
 
     ID3D12Resource* backBuffer;
     D3D12_CPU_DESCRIPTOR_HANDLE rtvBackBuffer;
-
-    ComPtr<ID3D12Resource> cbShadow;
+    
     ComPtr<ID3D12Resource> cbScene;
-    SceneConstantBuffer* pShadowData; // WRITE-ONLY pointer to the shadow pass constant buffer.
     SceneConstantBuffer* pSceneData;  // WRITE-ONLY pointer to the scene pass constant buffer.
-    D3D12_GPU_DESCRIPTOR_HANDLE cbvShadow;
-    D3D12_GPU_DESCRIPTOR_HANDLE cbvScene;
-
-    // Constant Buffer for postprocess
-    ComPtr<ID3D12Resource> cbScreenInfo;
-    ScreenInfo* pScreenInfoData;
     
 public:
     FrameResource(ID3D12Device* pDevice,
-        ID3D12DescriptorHeap* pCbvSrvHeap, UINT cbvSrvDescriptorSize,
         ID3D12Resource* pBackBuffer, const D3D12_CPU_DESCRIPTOR_HANDLE& hBackBuffer,
         UINT frameResourceIndex);
     
     ~FrameResource();
 
     void WriteConstantBuffers(const D3D12_VIEWPORT& viewport, Camera* pSceneCamera,
-                              Camera* lightCams, LightState* lights, int NumLights);
+                              Camera* lightCams, LightState* lights, int NumLights,
+                              float time, float height);
 
 private:
 };

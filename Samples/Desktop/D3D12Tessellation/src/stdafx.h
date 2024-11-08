@@ -50,5 +50,6 @@ static const UINT BLOCK_SIZE = 8;
 #define USE_DIRECT_INDEX 0
 
 static const UINT TitleThrottle = 200;    // Only update the titlebar every X number of frames.
+static const float MOVE_SPEED = 100.0f;
 
 
