@@ -43,7 +43,7 @@ struct FrameResource
 {
 public:    
     ComPtr<ID3D12CommandAllocator> commandAllocator;
-    ComPtr<ID3D12GraphicsCommandList> commandList;
+    //ComPtr<ID3D12GraphicsCommandList> commandList;
     UINT64 fenceValue;
 
     ID3D12Resource* backBuffer;

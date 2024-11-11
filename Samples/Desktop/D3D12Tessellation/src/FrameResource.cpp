@@ -23,15 +23,15 @@ FrameResource::FrameResource(ID3D12Device* pDevice,
 {
     ThrowIfFailed(pDevice->CreateCommandAllocator(D3D12_COMMAND_LIST_TYPE_DIRECT,
             IID_PPV_ARGS(&commandAllocator)));
-    ThrowIfFailed(pDevice->CreateCommandList(0, D3D12_COMMAND_LIST_TYPE_DIRECT,
+    /*ThrowIfFailed(pDevice->CreateCommandList(0, D3D12_COMMAND_LIST_TYPE_DIRECT,
             commandAllocator.Get(), nullptr,
-            IID_PPV_ARGS(&commandList)));
+            IID_PPV_ARGS(&commandList)));*/
 
     NAME_D3D12_OBJECT(commandAllocator);
-    NAME_D3D12_OBJECT(commandList);
+    //NAME_D3D12_OBJECT(commandList);
 
     // Close these command lists; don't record into them for now.
-    ThrowIfFailed(commandList->Close());
+    //ThrowIfFailed(commandList->Close());
 
     // Create the constant buffers.
     const UINT constantBufferSize =
@@ -58,7 +58,7 @@ FrameResource::~FrameResource()
     cbScene.Reset();
 
     backBuffer = nullptr;
-    commandList.Reset();
+    //commandList.Reset();
     commandAllocator.Reset();
 }
 
