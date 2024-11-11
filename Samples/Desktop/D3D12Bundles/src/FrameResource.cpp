@@ -71,14 +71,14 @@ void FrameResource::SetCityPositions(FLOAT intervalX, FLOAT intervalZ)
 {
     for (UINT i = 0; i < m_cityRowCount; i++)
     {
-        FLOAT cityOffsetZ = i * intervalZ;
+        FLOAT cityOffsetZ = (i - 0.5f * m_cityRowCount) * intervalZ;
         for (UINT j = 0; j < m_cityColumnCount; j++)
         {
-            FLOAT cityOffsetX = j * intervalX;
+            FLOAT cityOffsetX = (j - 0.5f * m_cityColumnCount) * intervalX;
 
             // The y position is based off of the city's row and column 
             // position to prevent z-fighting.
-            XMStoreFloat4x4(&m_modelMatrices[i * m_cityColumnCount + j], XMMatrixTranslation(cityOffsetX, 0.02f * (i * m_cityColumnCount + j), cityOffsetZ));
+            XMStoreFloat4x4(&m_modelMatrices[i * m_cityColumnCount + j], XMMatrixTranslation(cityOffsetX, 0.0f /*0.02f * (i * m_cityColumnCount + j)*/, cityOffsetZ));
         }
     }
 }

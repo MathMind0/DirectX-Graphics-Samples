@@ -39,9 +39,10 @@ public:
 
 private:
     static const UINT FrameCount = 3;
-    static const UINT CityRowCount = 10;
-    static const UINT CityColumnCount = 3;
-    static const bool UseBundles = true;
+    static const UINT CityRowCount = 100;
+    static const UINT CityColumnCount = 100;
+
+    bool UseBundles = true;
 
     // Pipeline objects.
     CD3DX12_VIEWPORT m_viewport;

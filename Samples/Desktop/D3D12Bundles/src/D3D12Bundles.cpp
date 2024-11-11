@@ -556,7 +556,16 @@ void D3D12Bundles::OnDestroy()
 
 void D3D12Bundles::OnKeyDown(UINT8 key)
 {
-    m_camera.OnKeyDown(key);
+    switch (key)
+    {
+    case 'B':
+    case 'b':
+        UseBundles = !UseBundles;
+        break;
+    default:
+        m_camera.OnKeyDown(key);
+        break;
+    }    
 }
 
 void D3D12Bundles::OnKeyUp(UINT8 key)
