@@ -597,7 +597,7 @@ void D3D12Tessellation::OnRender()
 {
     try
     {
-        ID3D12GraphicsCommandList* commandList = m_pCurrentFrameResource->commandList.Get();
+        ID3D12GraphicsCommandList* commandList = m_commandList.Get();//m_pCurrentFrameResource->commandList.Get();
                 
         BeginFrame();
         RenderScene();
@@ -652,7 +652,7 @@ void D3D12Tessellation::BeginFrame()
 {    
     // Reset the command allocator and list.
     ThrowIfFailed(m_pCurrentFrameResource->commandAllocator->Reset());
-    ID3D12GraphicsCommandList* commandList = m_pCurrentFrameResource->commandList.Get();
+    ID3D12GraphicsCommandList* commandList = m_commandList.Get();//m_pCurrentFrameResource->commandList.Get();
     ThrowIfFailed(commandList->Reset(m_pCurrentFrameResource->commandAllocator.Get(), nullptr));
 
     PIXBeginEvent(commandList, 0, L"Rendering a Frame");
@@ -663,7 +663,7 @@ void D3D12Tessellation::BeginFrame()
 
 void D3D12Tessellation::EndFrame()
 {
-    ID3D12GraphicsCommandList* commandList = m_pCurrentFrameResource->commandList.Get();
+    ID3D12GraphicsCommandList* commandList = m_commandList.Get();//m_pCurrentFrameResource->commandList.Get();
     PIXEndEvent(commandList);
     ThrowIfFailed(commandList->Close());
 
@@ -673,7 +673,7 @@ void D3D12Tessellation::EndFrame()
 
 void D3D12Tessellation::RenderScene()
 {
-    ID3D12GraphicsCommandList* commandList = m_pCurrentFrameResource->commandList.Get();
+    ID3D12GraphicsCommandList* commandList = m_commandList.Get();//m_pCurrentFrameResource->commandList.Get();
     
     PIXBeginEvent(commandList, 0, L"Rendering Scene");
     

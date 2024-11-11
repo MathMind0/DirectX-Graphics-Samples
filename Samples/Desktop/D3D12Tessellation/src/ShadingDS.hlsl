@@ -21,8 +21,8 @@ PSInput DSMain(PatchOutput patch, float2 uv : SV_DomainLocation, const OutputPat
     tangentZ = normalize(tangentZ);
     float3 normal = cross(tangentZ, tangentX);
     
-    output.tangent = mul(patch.matWorld, tangentX);
-    output.normal = mul(patch.matWorld, normal);
+    output.tangent = mul((float3x3)patch.matWorld, tangentX).xyz; 
+    output.normal = mul((float3x3)patch.matWorld, normal).xyz;
     
     output.position = mul(float4(p, 1.0), patch.matMVP);
     output.worldpos = mul(patch.matWorld, float4(p, 1.0));
