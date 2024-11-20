@@ -52,7 +52,7 @@ void D3D12PostprocessBlur::CreateRenderContext()
 {
     UINT dxgiFactoryFlags = 0;
 
-#if 0//defined(_DEBUG)
+#if defined(_DEBUG)
     // Enable the debug layer (requires the Graphics Tools "optional feature").
     // NOTE: Enabling the debug layer after device creation will invalidate the active device.
     {
@@ -335,7 +335,7 @@ void D3D12PostprocessBlur::CreateScenePSOs()
     psoDesc.PrimitiveTopologyType = D3D12_PRIMITIVE_TOPOLOGY_TYPE_TRIANGLE;
     psoDesc.NumRenderTargets = 1;
     psoDesc.RTVFormats[0] = DXGI_FORMAT_R8G8B8A8_UNORM;
-    psoDesc.DSVFormat = DXGI_FORMAT_D16_UNORM;
+    psoDesc.DSVFormat = m_bUseD16 ? DXGI_FORMAT_D16_UNORM : DXGI_FORMAT_D32_FLOAT;
     psoDesc.SampleDesc.Count = 1;
     psoDesc.SampleMask = UINT_MAX;
     
@@ -439,14 +439,14 @@ void D3D12PostprocessBlur::CreateDepthBuffer()
             static_cast<UINT>(m_viewport.Height), 
             1,
             1,
-            DXGI_FORMAT_D16_UNORM,
+            m_bUseD16 ? DXGI_FORMAT_D16_UNORM : DXGI_FORMAT_D32_FLOAT,
             1, 
             0,
             D3D12_TEXTURE_LAYOUT_UNKNOWN,
             D3D12_RESOURCE_FLAG_ALLOW_DEPTH_STENCIL | D3D12_RESOURCE_FLAG_DENY_SHADER_RESOURCE);
 
     D3D12_CLEAR_VALUE clearValue;    // Performance tip: Tell the runtime at resource creation the desired clear value.
-    clearValue.Format = DXGI_FORMAT_D16_UNORM;
+    clearValue.Format = m_bUseD16 ? DXGI_FORMAT_D16_UNORM : DXGI_FORMAT_D32_FLOAT;
     clearValue.DepthStencil.Depth = 1.0f;
     clearValue.DepthStencil.Stencil = 0;
 
@@ -777,14 +777,14 @@ void D3D12PostprocessBlur::CreateShadowResources()
         static_cast<UINT>(m_viewport.Height), 
         1,
         1,
-        DXGI_FORMAT_R32_TYPELESS,
+        m_bUseD16 ? DXGI_FORMAT_R16_TYPELESS : DXGI_FORMAT_R32_TYPELESS,
         1, 
         0,
         D3D12_TEXTURE_LAYOUT_UNKNOWN,
         D3D12_RESOURCE_FLAG_ALLOW_DEPTH_STENCIL);
 
     D3D12_CLEAR_VALUE clearValue; // Performance tip: Tell the runtime at resource creation the desired clear value.
-    clearValue.Format = DXGI_FORMAT_D32_FLOAT;
+    clearValue.Format = m_bUseD16 ? DXGI_FORMAT_D16_UNORM : DXGI_FORMAT_D32_FLOAT;
     clearValue.DepthStencil.Depth = 1.0f;
     clearValue.DepthStencil.Stencil = 0;
 
@@ -806,7 +806,7 @@ void D3D12PostprocessBlur::CreateShadowResources()
     // Describe and create the shadow depth view and cache the CPU 
     // descriptor handle.
     D3D12_DEPTH_STENCIL_VIEW_DESC depthStencilViewDesc = {};
-    depthStencilViewDesc.Format = DXGI_FORMAT_D32_FLOAT;
+    depthStencilViewDesc.Format = m_bUseD16 ? DXGI_FORMAT_D16_UNORM : DXGI_FORMAT_D32_FLOAT;
     depthStencilViewDesc.ViewDimension = D3D12_DSV_DIMENSION_TEXTURE2D;
     depthStencilViewDesc.Texture2D.MipSlice = 0;
     m_device->CreateDepthStencilView(m_shadowTexture.Get(), &depthStencilViewDesc, depthHandle);
@@ -822,7 +822,7 @@ void D3D12PostprocessBlur::CreateShadowResources()
         (INT)CSU_DESCRIPTORS::SHADOW_SRV, m_defaultDescriptorSize);
     
     D3D12_SHADER_RESOURCE_VIEW_DESC shadowSrvDesc = {};
-    shadowSrvDesc.Format = DXGI_FORMAT_R32_FLOAT;
+    shadowSrvDesc.Format = m_bUseD16 ? DXGI_FORMAT_R16_UNORM : DXGI_FORMAT_R32_FLOAT;
     shadowSrvDesc.ViewDimension = D3D12_SRV_DIMENSION_TEXTURE2D;
     shadowSrvDesc.Texture2D.MipLevels = 1;
     shadowSrvDesc.Shader4ComponentMapping = D3D12_DEFAULT_SHADER_4_COMPONENT_MAPPING;
@@ -968,6 +968,7 @@ void D3D12PostprocessBlur::OnUpdate()
         }
         ThrowIfFailed(m_fence->SetEventOnCompletion(m_pCurrentFrameResource->fenceValue, eventHandle));
         WaitForSingleObject(eventHandle, INFINITE);
+        //PIXNotifyWakeFromFenceSignal(eventHandle);
         CloseHandle(eventHandle);
     }
 
@@ -1647,6 +1648,9 @@ void D3D12PostprocessBlur::OnKeyDown(UINT8 key)
         break;
     case 0x35: // '5'
         m_blurMethod = BLUR_METHOD::BLUR_COMPUTE_BLOCK;
+        break;
+    case VK_F1:
+        m_bUseD16 = !m_bUseD16;
         break;
     }
 }

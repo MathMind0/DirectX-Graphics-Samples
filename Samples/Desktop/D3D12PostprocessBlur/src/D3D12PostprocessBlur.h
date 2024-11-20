@@ -137,6 +137,7 @@ private:
     D3D12_GPU_DESCRIPTOR_HANDLE m_shadowDepthHandle;
     ComPtr<ID3D12PipelineState> m_psoRenderShadow;
     D3D12_GPU_DESCRIPTOR_HANDLE m_srvNullGPU;
+    bool    m_bUseD16 = true;
     
     // Scene Resources
     ComPtr<ID3D12RootSignature> m_sigRenderScene;
