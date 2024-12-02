@@ -156,7 +156,7 @@
     <ClInclude Include="StepTimer.h" />
     <ClInclude Include="Win32Application.h" />
     <ClInclude Include="D3D12RaytracingHelloWorld.h" />
-    <ClInclude Include="d3dx12.h" />
+    <ClInclude Include="../d3dx12.h" />
     <ClInclude Include="DXSample.h" />
     <ClInclude Include="DXSampleHelper.h" />
     <ClInclude Include="stdafx.h" />
