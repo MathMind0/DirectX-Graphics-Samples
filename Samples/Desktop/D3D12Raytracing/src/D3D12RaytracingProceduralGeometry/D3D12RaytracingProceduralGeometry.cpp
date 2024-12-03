@@ -190,23 +190,20 @@ void D3D12RaytracingProceduralGeometry::InitializeScene()
         m_planeMaterialCB = { XMFLOAT4(0.9f, 0.9f, 0.9f, 1.0f), 0.25f, 1, 0.4f, 50, 1};
 
         // Albedos
-        XMFLOAT4 green = XMFLOAT4(0.1f, 1.0f, 0.5f, 1.0f);
-        XMFLOAT4 red = XMFLOAT4(1.0f, 0.5f, 0.5f, 1.0f);
-        XMFLOAT4 yellow = XMFLOAT4(1.0f, 1.0f, 0.5f, 1.0f);
         
         UINT offset = 0;
         // Analytic primitives.
         {
             using namespace AnalyticPrimitive;
-            SetAttributes(offset + AABB, red);
-            SetAttributes(offset + Spheres, ChromiumReflectance, 1);
+            SetAttributes(offset + AABB, GoldReflectance, 1.f);
+            SetAttributes(offset + Spheres, CopperReflectance, 1.f);
             offset += AnalyticPrimitive::Count;
         }
 
         // Volumetric primitives.
         {
             using namespace VolumetricPrimitive;
-            SetAttributes(offset + Metaballs, ChromiumReflectance, 1);
+            SetAttributes(offset + Metaballs, ChromiumReflectance, 1.f);
             offset += VolumetricPrimitive::Count;
         }
 
@@ -215,11 +212,11 @@ void D3D12RaytracingProceduralGeometry::InitializeScene()
             using namespace SignedDistancePrimitive;
             SetAttributes(offset + MiniSpheres, green);
             SetAttributes(offset + IntersectedRoundCube, green);
-            SetAttributes(offset + SquareTorus, ChromiumReflectance, 1);
-            SetAttributes(offset + TwistedTorus, yellow, 0, 1.0f, 0.7f, 50, 0.5f );
-            SetAttributes(offset + Cog, yellow, 0, 1.0f, 0.1f, 2);
+            SetAttributes(offset + SquareTorus, ChromiumReflectance, 1.f);
+            SetAttributes(offset + TwistedTorus, yellow, 0.f, 1.0f, 0.7f, 50.f, 0.5f );
+            SetAttributes(offset + Cog, yellow, 0.f, 1.0f, 0.1f, 2.f);
             SetAttributes(offset + Cylinder, red);
-            SetAttributes(offset + FractalPyramid, green, 0, 1, 0.1f, 4, 0.8f);
+            SetAttributes(offset + FractalPyramid, green, 0.f, 1.f, 0.1f, 4.f, 0.8f);
         }
     }
 
@@ -738,7 +735,7 @@ AccelerationStructureBuffers D3D12RaytracingProceduralGeometry::BuildBottomLevel
 
     // Allocate resources for acceleration structures.
     // Acceleration structures can only be placed in resources that are created in the default heap (or custom heap equivalent). 
-    // Default heap is OK since the application doesn’t need CPU read/write access to them. 
+    // Default heap is OK since the application doesnï¿½t need CPU read/write access to them. 
     // The resources that will contain acceleration structures must be created in the state D3D12_RESOURCE_STATE_RAYTRACING_ACCELERATION_STRUCTURE, 
     // and must have resource flag D3D12_RESOURCE_FLAG_ALLOW_UNORDERED_ACCESS. The ALLOW_UNORDERED_ACCESS requirement simply acknowledges both: 
     //  - the system will be doing this type of access in its implementation of acceleration structure builds behind the scenes.
@@ -842,7 +839,7 @@ AccelerationStructureBuffers D3D12RaytracingProceduralGeometry::BuildTopLevelAS(
 
     // Allocate resources for acceleration structures.
     // Acceleration structures can only be placed in resources that are created in the default heap (or custom heap equivalent). 
-    // Default heap is OK since the application doesn’t need CPU read/write access to them. 
+    // Default heap is OK since the application doesnï¿½t need CPU read/write access to them. 
     // The resources that will contain acceleration structures must be created in the state D3D12_RESOURCE_STATE_RAYTRACING_ACCELERATION_STRUCTURE, 
     // and must have resource flag D3D12_RESOURCE_FLAG_ALLOW_UNORDERED_ACCESS. The ALLOW_UNORDERED_ACCESS requirement simply acknowledges both: 
     //  - the system will be doing this type of access in its implementation of acceleration structure builds behind the scenes.
