@@ -353,7 +353,7 @@ void D3D12MeshletInstancing::OnUpdate()
     {
         // Update window text with FPS value.
         wchar_t fps[64];
-        swprintf_s(fps, L"%ufps", m_timer.GetFramesPerSecond());
+        swprintf_s(fps, L"%ufps, %u Instances", m_timer.GetFramesPerSecond(), m_instanceCount);
         SetCustomWindowText(fps);
     }
 
