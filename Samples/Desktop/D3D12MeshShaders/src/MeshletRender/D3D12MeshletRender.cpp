@@ -342,18 +342,26 @@ void D3D12MeshletRender::OnUpdate()
 // Render the scene.
 void D3D12MeshletRender::OnRender()
 {
+    PIXScopedEvent(m_commandQueue.Get(), PIX_COLOR(255, 0, 0), L"Rendering a Frame");
+    
     // Record all the commands we need to render the scene into the command list.
     PopulateCommandList();
 
     // Execute the command list.
-    ID3D12CommandList* ppCommandLists[] = { m_commandList.Get() };
-    m_commandQueue->ExecuteCommandLists(_countof(ppCommandLists), ppCommandLists);
-
+    {
+        PIXScopedEvent(m_commandList.Get(), PIX_COLOR(180, 180, 0), L"Executing Command Lists");
+        ID3D12CommandList* ppCommandLists[] = { m_commandList.Get() };
+        m_commandQueue->ExecuteCommandLists(_countof(ppCommandLists), ppCommandLists);
+    }
+    
     // Present the frame.
-    ThrowIfFailed(m_swapChain->Present(1, 0));
-
+    {
+        PIXScopedEvent(m_commandQueue.Get(), PIX_COLOR(0, 0, 255), L"Presenting to screen");
+        ThrowIfFailed(m_swapChain->Present(1, 0));
+    }
+    
     MoveToNextFrame();
-}
+ }
 
 void D3D12MeshletRender::OnDestroy()
 {
@@ -376,6 +384,8 @@ void D3D12MeshletRender::OnKeyUp(UINT8 key)
 
 void D3D12MeshletRender::PopulateCommandList()
 {
+    PIXScopedEvent(m_commandList.Get(), PIX_COLOR(0, 255, 0), L"Populating Command List");
+    
     // Command list allocators can only be reset when the associated 
     // command lists have finished execution on the GPU; apps should use 
     // fences to determine GPU execution progress.
@@ -437,7 +447,8 @@ void D3D12MeshletRender::WaitForGpu()
     // Wait until the fence has been processed.
     ThrowIfFailed(m_fence->SetEventOnCompletion(m_fenceValues[m_frameIndex], m_fenceEvent));
     WaitForSingleObjectEx(m_fenceEvent, INFINITE, FALSE);
-
+    PIXNotifyWakeFromFenceSignal(m_fenceEvent);
+    
     // Increment the fence value for the current frame.
     m_fenceValues[m_frameIndex]++;
 }
@@ -457,6 +468,7 @@ void D3D12MeshletRender::MoveToNextFrame()
     {
         ThrowIfFailed(m_fence->SetEventOnCompletion(m_fenceValues[m_frameIndex], m_fenceEvent));
         WaitForSingleObjectEx(m_fenceEvent, INFINITE, FALSE);
+        PIXNotifyWakeFromFenceSignal(m_fenceEvent);
     }
 
     // Set the fence value for the next frame.

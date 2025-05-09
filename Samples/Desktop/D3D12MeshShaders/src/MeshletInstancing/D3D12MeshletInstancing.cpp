@@ -371,15 +371,23 @@ void D3D12MeshletInstancing::OnUpdate()
 // Render the scene.
 void D3D12MeshletInstancing::OnRender()
 {
+    PIXScopedEvent(m_commandQueue.Get(), PIX_COLOR(255, 0, 0), L"Rendering a Frame");
+    
     // Record all the commands we need to render the scene into the command list.
     PopulateCommandList();
 
     // Execute the command list.
-    ID3D12CommandList* ppCommandLists[] = { m_commandList.Get() };
-    m_commandQueue->ExecuteCommandLists(_countof(ppCommandLists), ppCommandLists);
+    {
+        PIXScopedEvent(m_commandList.Get(), PIX_COLOR(180, 180, 0), L"Executing Command Lists");
+        ID3D12CommandList* ppCommandLists[] = { m_commandList.Get() };
+        m_commandQueue->ExecuteCommandLists(_countof(ppCommandLists), ppCommandLists);
+    }
 
     // Present the frame.
-    ThrowIfFailed(m_swapChain->Present(1, 0));
+    {
+        PIXScopedEvent(m_commandQueue.Get(), PIX_COLOR(0, 0, 255), L"Presenting to screen");
+        ThrowIfFailed(m_swapChain->Present(1, 0));
+    }
 
     MoveToNextFrame();
 }
@@ -424,7 +432,7 @@ void D3D12MeshletInstancing::OnKeyUp(UINT8 key)
 }
 
 void D3D12MeshletInstancing::PopulateCommandList()
-{
+{   
     // Command list allocators can only be reset when the associated 
     // command lists have finished execution on the GPU; apps should use 
     // fences to determine GPU execution progress.
@@ -470,6 +478,10 @@ void D3D12MeshletInstancing::PopulateCommandList()
 
     for (auto& mesh : m_model)
     {
+        PIXScopedEvent(m_commandList.Get(), PIX_COLOR(0, 255, 0),
+            L"Drawing Mesh - Vertex Count = %d, Index Count = %d, Subset Count = %d, Instances = %d",
+            mesh.VertexCount, mesh.IndexCount, mesh.MeshletSubsets.size(), m_instanceCount);
+        
         m_commandList->SetGraphicsRoot32BitConstant(2, mesh.IndexSize, 0);
         m_commandList->SetGraphicsRootShaderResourceView(3, mesh.VertexResources[0]->GetGPUVirtualAddress());
         m_commandList->SetGraphicsRootShaderResourceView(4, mesh.MeshletResource->GetGPUVirtualAddress());
@@ -479,13 +491,17 @@ void D3D12MeshletInstancing::PopulateCommandList()
         for (uint32_t i = 0; i < mesh.MeshletSubsets.size(); ++i)
         {
             auto& subset = mesh.MeshletSubsets[i];
-
+            
             uint32_t packCount = mesh.GetLastMeshletPackCount(i, MAX_VERTS, MAX_PRIMS);
             float groupsPerInstance = float(subset.Count - 1) + 1.0f / packCount;
 
             uint32_t maxInstancePerBatch = static_cast<uint32_t>(float(c_maxGroupDispatchCount) / groupsPerInstance);
             uint32_t dispatchCount = DivRoundUp(m_instanceCount, maxInstancePerBatch);
 
+            PIXScopedEvent(m_commandList.Get(), PIX_COLOR(0, 180, 0),
+                L"Drawing Meshlet Subset - Count = %d, Offset = %d, Batches = %d, InstancePerBatch = %d",
+                subset.Count, subset.Offset, dispatchCount, maxInstancePerBatch);
+            
             for (uint32_t j = 0; j < dispatchCount; ++j)
             {
                 uint32_t instanceOffset = maxInstancePerBatch * j;
@@ -518,7 +534,8 @@ void D3D12MeshletInstancing::WaitForGpu()
     // Wait until the fence has been processed.
     ThrowIfFailed(m_fence->SetEventOnCompletion(m_fenceValues[m_frameIndex], m_fenceEvent));
     WaitForSingleObjectEx(m_fenceEvent, INFINITE, FALSE);
-
+    PIXNotifyWakeFromFenceSignal(m_fenceEvent);
+    
     // Increment the fence value for the current frame.
     m_fenceValues[m_frameIndex]++;
 }
@@ -538,6 +555,7 @@ void D3D12MeshletInstancing::MoveToNextFrame()
     {
         ThrowIfFailed(m_fence->SetEventOnCompletion(m_fenceValues[m_frameIndex], m_fenceEvent));
         WaitForSingleObjectEx(m_fenceEvent, INFINITE, FALSE);
+        PIXNotifyWakeFromFenceSignal(m_fenceEvent);
     }
 
     // Set the fence value for the next frame.
