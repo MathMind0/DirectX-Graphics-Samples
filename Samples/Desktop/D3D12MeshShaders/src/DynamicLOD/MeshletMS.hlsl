@@ -16,7 +16,8 @@ float4 LODColor(float4 boundingSphere)
     uint lodLevel = ComputeLOD(boundingSphere);
     float alpha = float(lodLevel) / (Constants.LODCount - 1);
 
-    return lerp(float4(1, 0, 0, 1), float4(0, 1, 0, 1), alpha);
+    return lerp(float4(1, 0, 0, 1), float4(0, 0, 1, 1), alpha);
+    //return float4(0, 0, 1, 1);
 }
 
 uint3 UnpackPrimitive(uint primitive)
