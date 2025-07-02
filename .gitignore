@@ -12,6 +12,7 @@
 **/src/bin
 **/src/obj
 **/.vs
+**/.idea
 
 *.hlsl.h
 **/Build_VS16
@@ -19,5 +20,9 @@
 
 *.vcxproj.user
 *.opendb
+*.7z
+*.wpix
+*.user
+
 Samples/Desktop/D3D12HelloWorld/src/HelloVAResourceInterop/*.h264
 Samples/Desktop/D3D12HelloWorld/src/HelloVAEncode/*.h264
