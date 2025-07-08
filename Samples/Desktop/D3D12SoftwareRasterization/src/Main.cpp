@@ -15,6 +15,6 @@
 _Use_decl_annotations_
 int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE, LPSTR, int nCmdShow)
 {
-    D3D12nBodyGravity sample(1280, 720, L"D3D12 n-Body Gravity Simulation");
+    D3D12SoftwareRasterization sample(1280, 720, L"D3D12 Software Rasterization");
     return Win32Application::Run(&sample, hInstance, nCmdShow);
 }
