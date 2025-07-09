@@ -14,28 +14,30 @@ struct VSOutput
     float2 uv : TEXCOORD0;
 };
 
+[RootSignature(RootSig)]
 VSOutput VSMain(uint vid : SV_VertexID)
 {
     VSOutput o;
     switch (vid)
     {
-        case 0:
-            o.pos = float4(-1.0f, -1.0f, 0.0f, 1.0f);
-            o.uv = float2(0.0f, 1.0f);
-            break;
+    case 0:
+        o.pos = float4(-1.0, -1.0, 0.5, 1.0);
+        o.uv = float2(0.0, 1.0);
+        break;
 
     case 1:
-        o.pos = float4(-1.0f, 1.0f, 0.0f, 1.0f);
-        o.uv = float2(0.0f, 0.0f);
+        o.pos = float4(-1.0, 3.0, 0.5, 1.0);
+        o.uv = float2(0.0, -1.0);
         break;
+        
     case 2:
-        o.pos = float4(1.0f, -1.0f, 0.0f, 1.0f);
-        o.uv = float2(1.0f, 1.0f);
+        o.pos = float4(3.0, -1.0, 0.5, 1.0);
+        o.uv = float2(2.0, 1.0);
         break;
 
     default:
-        o.pos = float4(0.0f, 0.0f, 0.0f, 1.0f);
-        o.uv = float2(0.0f, 0.0f);
+        o.pos = float4(0.0, 0.0, 0.5, 1.0);
+        o.uv = float2(0.0, 0.0);
         break;
     }
 
@@ -48,11 +50,15 @@ SamplerState PointClamp : register(s0);
 [RootSignature(RootSig)]
 void PSMain(VSOutput input, out float4 color : SV_Target)
 {
+#if 1
     int2 location = (int2)(input.uv * szCanvas);
     uint64_t value = Canvas.Load(int3(location, 0));
     uint iColor = uint(value);
-    float r = (iColor & 0xFF) / 255.0f;
-    float g = ((iColor >> 8) & 0xFF) / 255.0f;
-    float b = ((iColor >> 16) & 0xFF) / 255.0f;
-    color = float4(r, g, b, 1.0f);
+    float r = (iColor & 0xFF) / 255.0;
+    float g = ((iColor >> 8) & 0xFF) / 255.0;
+    float b = ((iColor >> 16) & 0xFF) / 255.0;
+    color = float4(r, g, b, 1.0);
+#else
+    color = float4(1.0, 0.0, 0.0, 1.0);
+#endif
 }

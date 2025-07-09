@@ -28,10 +28,10 @@ RWTexture2D<uint64_t> Canvas: register(u0);
 [RootSignature(RootSig)]
 [numthreads(GROUPSIZEX, GROUPSIZEY, 1)]
 void RasterMain(uint3 Gid : SV_GroupID, uint3 DTid : SV_DispatchThreadID, uint3 GTid : SV_GroupThreadID, uint GI : SV_GroupIndex)
-{
-    uint rand = (DTid.x * 524287 ^ DTid.y * 65537);
-    
+{    
 #if 1
+    uint rand = ((DTid.x + 1) * 53) ^ ((DTid.y + 1) * 59);
+
     for (uint py = DTid.y * BLOCK_OFFSET; py < DTid.y * BLOCK_OFFSET + BLOCK_SIZE; py++)
     {
         if (py < szCanvas.y)
@@ -42,6 +42,22 @@ void RasterMain(uint3 Gid : SV_GroupID, uint3 DTid : SV_DispatchThreadID, uint3 
                 {
                     uint64_t value = rand << 32 | rand;
                     InterlockedMax(Canvas[uint2(px, py)], value);
+                }
+            }
+        }
+    }
+#endif
+
+#if 0
+    for (uint py = DTid.y * BLOCK_OFFSET; py < DTid.y * BLOCK_OFFSET + BLOCK_OFFSET; py++)
+    {
+        if (py < szCanvas.x)
+        {
+            for (uint px = DTid.x * BLOCK_OFFSET; px < DTid.x * BLOCK_OFFSET + BLOCK_OFFSET; px++)
+            {
+                if (px < szCanvas.x)
+                {                    
+                    Canvas[uint2(px, py)] = (DTid.x + DTid.y) * 8;
                 }
             }
         }

@@ -25,6 +25,7 @@ D3D12SoftwareRasterization::D3D12SoftwareRasterization(UINT width, UINT height, 
 
     m_viewport = CD3DX12_VIEWPORT(0.f, 0.f,
         static_cast<float>(m_frameWidth), static_cast<float>(m_frameHeight));
+    m_scissorRect = CD3DX12_RECT(0.f, 0.f, m_frameWidth, m_frameHeight);
     
     ThrowIfFailed(DXGIDeclareAdapterRemovalSupport());
 }
@@ -230,6 +231,7 @@ void D3D12SoftwareRasterization::CreatePSOs()
     psoDesc.VS = {vs.code, vs.size};
     psoDesc.PS = {ps.code, ps.size};
     psoDesc.RasterizerState = CD3DX12_RASTERIZER_DESC(D3D12_DEFAULT);
+    psoDesc.RasterizerState.CullMode = D3D12_CULL_MODE_NONE;
     psoDesc.BlendState = CD3DX12_BLEND_DESC(D3D12_DEFAULT);
     psoDesc.DepthStencilState.DepthEnable = false;
     psoDesc.DepthStencilState.StencilEnable = false;
@@ -584,15 +586,21 @@ void D3D12SoftwareRasterization::PopulateCommandList()
         m_commandListGraphics->OMSetRenderTargets(1,
             &rtvHandle, FALSE, nullptr);
         m_commandListGraphics->RSSetViewports(1, &m_viewport);
+        m_commandListGraphics->RSSetScissorRects(1, &m_scissorRect);
         
         const float clearColor[] = { 0.0f, 0.0f, 0.0f, 0.0f };
         m_commandListGraphics->ClearRenderTargetView(rtvHandle, clearColor, 0, nullptr);
 
+        m_commandListGraphics->IASetPrimitiveTopology(D3D_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
+        m_commandListGraphics->IASetVertexBuffers(0, 0, nullptr);
+        m_commandListGraphics->IASetIndexBuffer(nullptr);
+        
         m_commandListGraphics->SetPipelineState(m_psoCopyToRT.Get());
         m_commandListGraphics->SetGraphicsRootSignature(m_sigCopyToRT.Get());
         UINT szCanvas[] = { m_frameWidth, m_frameHeight };
         m_commandListGraphics->SetGraphicsRoot32BitConstants(0, 2, static_cast<void*>(szCanvas), 0);
         m_commandListGraphics->SetGraphicsRootDescriptorTable(1, m_srvRasterCanvasGpu);
+
         m_commandListGraphics->DrawInstanced(3, 1, 0, 0);
 
         m_commandListGraphics->ResourceBarrier(1, &CD3DX12_RESOURCE_BARRIER::Transition(

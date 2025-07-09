@@ -61,8 +61,10 @@ private:
     ComPtr<IDXGIFactory4> m_dxgiFactory;
     ComPtr<IDXGISwapChain3> m_swapChain;
     ComPtr<ID3D12Device> m_device;
+
     ComPtr<ID3D12Resource> m_renderTargets[FrameCount];
     D3D12_VIEWPORT m_viewport;
+    CD3DX12_RECT m_scissorRect;
         
     ComPtr<ID3D12CommandAllocator> m_commandAllocatorGraphics[FrameCount];
     ComPtr<ID3D12CommandQueue> m_commandQueueGraphics;
