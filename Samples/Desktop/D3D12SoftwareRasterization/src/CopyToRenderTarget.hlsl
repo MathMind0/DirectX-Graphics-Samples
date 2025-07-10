@@ -14,7 +14,6 @@ struct VSOutput
     float2 uv : TEXCOORD0;
 };
 
-[RootSignature(RootSig)]
 VSOutput VSMain(uint vid : SV_VertexID)
 {
     VSOutput o;

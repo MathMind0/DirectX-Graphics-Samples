@@ -24,15 +24,15 @@ D3D12SoftwareRasterization::D3D12SoftwareRasterization(UINT width, UINT height, 
     m_frameHeight = static_cast<UINT>(ceilf(static_cast<float>(m_height) / FrameScale));
 
     m_viewport = CD3DX12_VIEWPORT(0.f, 0.f,
-        static_cast<float>(m_frameWidth), static_cast<float>(m_frameHeight));
-    m_scissorRect = CD3DX12_RECT(0.f, 0.f, m_frameWidth, m_frameHeight);
+        static_cast<float>(m_width), static_cast<float>(m_height));
+    m_scissorRect = CD3DX12_RECT(0, 0, m_width, m_height);
     
     ThrowIfFailed(DXGIDeclareAdapterRemovalSupport());
 }
 
 void D3D12SoftwareRasterization::OnInit()
 {
-    m_camera.Init({ 0.0f, 0.0f, 1500.0f });
+    m_camera.Init({ 0.0f, 0.0f, 5.0f });
     m_camera.SetMoveSpeed(250.0f);
 
     LoadPipeline();
@@ -112,12 +112,13 @@ void D3D12SoftwareRasterization::LoadPipeline()
     {
         DXGI_SWAP_CHAIN_DESC1 swapChainDesc = {};
         swapChainDesc.BufferCount = FrameCount;
-        swapChainDesc.Width = m_frameWidth;
-        swapChainDesc.Height = m_frameHeight;
+        swapChainDesc.Width = m_width;
+        swapChainDesc.Height = m_height;
         swapChainDesc.Format = DXGI_FORMAT_R8G8B8A8_UNORM;
         swapChainDesc.BufferUsage = DXGI_USAGE_RENDER_TARGET_OUTPUT;
         swapChainDesc.SwapEffect = DXGI_SWAP_EFFECT_FLIP_DISCARD;
         swapChainDesc.SampleDesc.Count = 1;
+        swapChainDesc.Scaling = DXGI_SCALING_STRETCH;
 
         ComPtr<IDXGISwapChain1> swapChain;
         ThrowIfFailed(m_dxgiFactory->CreateSwapChainForHwnd(
@@ -245,7 +246,7 @@ void D3D12SoftwareRasterization::CreatePSOs()
     ThrowIfFailed(m_device->CreateGraphicsPipelineState(&psoDesc, IID_PPV_ARGS(&m_psoCopyToRT)));
     NAME_D3D12_OBJECT(m_psoCopyToRT);
     
-    ReadDataFromFile(GetAssetFullPath(L"SoftwareRasterizationCS.cso").c_str(),
+    ReadDataFromFile(GetAssetFullPath(L"RasterMain.cso").c_str(),
                  &cs.code, &cs.size);
 
     rootSigBlob->Release();
@@ -260,7 +261,23 @@ void D3D12SoftwareRasterization::CreatePSOs()
     psoDescRasterize.CS = {cs.code, cs.size};
     
     ThrowIfFailed(m_device->CreateComputePipelineState(&psoDescRasterize, IID_PPV_ARGS(&m_psoRasterize)));
-    NAME_D3D12_OBJECT(m_psoRasterize);    
+    NAME_D3D12_OBJECT(m_psoRasterize);
+
+    ReadDataFromFile(GetAssetFullPath(L"RasterInit.cso").c_str(),
+             &cs.code, &cs.size);
+
+    rootSigBlob->Release();
+    D3DGetBlobPart(cs.code, cs.size, D3D_BLOB_ROOT_SIGNATURE, 0, &rootSigBlob);
+    ThrowIfFailed(m_device->CreateRootSignature(0,
+                                                rootSigBlob->GetBufferPointer(), rootSigBlob->GetBufferSize(),
+                                                IID_PPV_ARGS(&m_sigRasterInit)));
+    NAME_D3D12_OBJECT(m_sigRasterInit);
+    
+    psoDescRasterize.pRootSignature = m_sigRasterInit.Get();
+    psoDescRasterize.CS = {cs.code, cs.size};
+    
+    ThrowIfFailed(m_device->CreateComputePipelineState(&psoDescRasterize, IID_PPV_ARGS(&m_psoRasterInit)));
+    NAME_D3D12_OBJECT(m_psoRasterInit); 
 }
 
 // Create the vertex buffer and the index buffer of the mesh.
@@ -276,7 +293,7 @@ void D3D12SoftwareRasterization::CreateMeshBuffers()
     uint32_t Indices[] = {0, 1, 2};
     size_t szIndexBuffer = sizeof(Indices);
 
-    m_numTriangles = 1;
+    m_numTriangles = _countof(Indices) / 3;
     
     ThrowIfFailed(m_device->CreateCommittedResource(
         &CD3DX12_HEAP_PROPERTIES(D3D12_HEAP_TYPE_DEFAULT),
@@ -356,11 +373,11 @@ void D3D12SoftwareRasterization::CreateMeshBuffers()
         (INT)SRV_INDEX_BUFFER, m_srvUavDescriptorSize);
     
     D3D12_SHADER_RESOURCE_VIEW_DESC srvIndexBufferDesc = {};
-    srvIndexBufferDesc.Format = DXGI_FORMAT_R32_UINT;
+    srvIndexBufferDesc.Format = DXGI_FORMAT_UNKNOWN;
     srvIndexBufferDesc.ViewDimension = D3D12_SRV_DIMENSION_BUFFER;
     srvIndexBufferDesc.Shader4ComponentMapping = D3D12_DEFAULT_SHADER_4_COMPONENT_MAPPING;
-    srvIndexBufferDesc.Buffer.NumElements = _countof(Indices);
-    srvIndexBufferDesc.Buffer.StructureByteStride = 0;
+    srvIndexBufferDesc.Buffer.NumElements = m_numTriangles;
+    srvIndexBufferDesc.Buffer.StructureByteStride = sizeof(uint32_t) * 3;
 
     m_device->CreateShaderResourceView(m_indexBuffer.Get(), &srvIndexBufferDesc, m_srvIndexBufferCpu);
 }
@@ -497,6 +514,8 @@ void D3D12SoftwareRasterization::ReleaseD3DResources()
 
     m_psoRasterize.Reset();
     m_sigRasterize.Reset();
+    m_psoRasterInit.Reset();
+    m_sigRasterInit.Reset();
     m_psoCopyToRT.Reset();
     m_sigCopyToRT.Reset();
     
@@ -549,18 +568,32 @@ void D3D12SoftwareRasterization::PopulateCommandList()
     // list, that command list can then be reset at any time and must be before
     // re-recording.
     ThrowIfFailed(m_commandListGraphics->Reset(m_commandAllocatorGraphics[m_frameIndex].Get(),
-        m_psoRasterize.Get()));
+        m_psoRasterInit.Get()));
     
     ID3D12DescriptorHeap* ppHeaps[] = {m_srvUavHeap.Get()};
     m_commandListGraphics->SetDescriptorHeaps(_countof(ppHeaps), ppHeaps);
-    
+
     {
-        PIXScopedEvent(m_commandListGraphics.Get(), 0, L"Rasterization");
+        PIXScopedEvent(m_commandListGraphics.Get(), 0, L"RasterInit");
 
         m_commandListGraphics->ResourceBarrier(1, &CD3DX12_RESOURCE_BARRIER::Transition(
             m_texRasterCanvas.Get(),
             D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE, D3D12_RESOURCE_STATE_UNORDERED_ACCESS));
 
+        m_commandListGraphics->SetComputeRootSignature(m_sigRasterInit.Get());
+        m_commandListGraphics->SetComputeRootConstantBufferView(0, m_constantBuffer[m_frameIndex]->GetGPUVirtualAddress());
+        m_commandListGraphics->SetComputeRootShaderResourceView(1, m_vertexBuffer->GetGPUVirtualAddress());
+        m_commandListGraphics->SetComputeRootShaderResourceView(2, m_indexBuffer->GetGPUVirtualAddress());
+        m_commandListGraphics->SetComputeRootDescriptorTable(3, m_uavRasterCanvasGpu);
+        m_commandListGraphics->Dispatch((m_frameWidth + 7)/ 8, (m_frameWidth + 7)/ 8, 1);
+
+        m_commandListGraphics->ResourceBarrier(1, &CD3DX12_RESOURCE_BARRIER::UAV(m_texRasterCanvas.Get()));
+    }
+
+    {
+        PIXScopedEvent(m_commandListGraphics.Get(), 0, L"Rasterization");
+
+        m_commandListGraphics->SetPipelineState(m_psoRasterize.Get());
         m_commandListGraphics->SetComputeRootSignature(m_sigRasterize.Get());
         m_commandListGraphics->SetComputeRootConstantBufferView(0, m_constantBuffer[m_frameIndex]->GetGPUVirtualAddress());
         m_commandListGraphics->SetComputeRootShaderResourceView(1, m_vertexBuffer->GetGPUVirtualAddress());

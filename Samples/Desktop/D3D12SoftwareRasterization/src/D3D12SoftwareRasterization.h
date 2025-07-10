@@ -78,6 +78,8 @@ private:
     // Asset objects.
     ComPtr<ID3D12RootSignature> m_sigRasterize;
     ComPtr<ID3D12PipelineState> m_psoRasterize;
+    ComPtr<ID3D12RootSignature> m_sigRasterInit;
+    ComPtr<ID3D12PipelineState> m_psoRasterInit;
     ComPtr<ID3D12RootSignature> m_sigCopyToRT;
     ComPtr<ID3D12PipelineState> m_psoCopyToRT;
 

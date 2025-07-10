@@ -135,8 +135,21 @@
       <SuppressStartupBanner>true</SuppressStartupBanner>
       <MinimalRebuildFromTracking>true</MinimalRebuildFromTracking>
       <AdditionalOptions>-Qembed_debug</AdditionalOptions>
-      <ObjectFileOutput Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">bin\x64\Debug\%(Filename).cso</ObjectFileOutput>
-      <ObjectFileOutput Condition="'$(Configuration)|$(Platform)'=='Release|x64'">bin\x64\Release\%(Filename).cso</ObjectFileOutput>
+      <ObjectFileOutput Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">bin\x64\Debug\RasterMain.cso</ObjectFileOutput>
+      <ObjectFileOutput Condition="'$(Configuration)|$(Platform)'=='Release|x64'">bin\x64\Release\RasterMain.cso</ObjectFileOutput>
+      <DisableOptimizations Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">true</DisableOptimizations>
+      <DisableOptimizations Condition="'$(Configuration)|$(Platform)'=='Release|x64'">false</DisableOptimizations>
+    </FxCompile>
+    <FxCompile Include="SoftwareRasterizationCS.hlsl">
+      <EntryPointName>RasterInit</EntryPointName>
+      <ShaderType>Compute</ShaderType>
+      <ShaderModel>6.6</ShaderModel>
+      <EnableDebuggingInformation>true</EnableDebuggingInformation>
+      <SuppressStartupBanner>true</SuppressStartupBanner>
+      <MinimalRebuildFromTracking>true</MinimalRebuildFromTracking>
+      <AdditionalOptions>-Qembed_debug</AdditionalOptions>
+      <ObjectFileOutput Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">bin\x64\Debug\RasterInit.cso</ObjectFileOutput>
+      <ObjectFileOutput Condition="'$(Configuration)|$(Platform)'=='Release|x64'">bin\x64\Release\RasterInit.cso</ObjectFileOutput>
       <DisableOptimizations Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">true</DisableOptimizations>
       <DisableOptimizations Condition="'$(Configuration)|$(Platform)'=='Release|x64'">false</DisableOptimizations>
     </FxCompile>
