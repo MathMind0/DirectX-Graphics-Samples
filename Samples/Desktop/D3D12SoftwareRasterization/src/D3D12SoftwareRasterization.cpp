@@ -284,9 +284,9 @@ void D3D12SoftwareRasterization::CreatePSOs()
 void D3D12SoftwareRasterization::CreateMeshBuffers()
 {
     Vertex Vertices[] = {
-    {{1.f, 0.f, 0.f}},
-    {{-1.f, 0.f, 0.f}},
-    {{0.f, 1.f, 0.f}}};
+    {{1.f, 0.f, 0.f}, 0xFF},
+    {{-1.f, 0.f, 0.f}, 0xFF00},
+    {{0.f, 1.f, 0.f}, 0xFF0000}};
 
     size_t szVertexBuffer = sizeof(Vertices);
     
