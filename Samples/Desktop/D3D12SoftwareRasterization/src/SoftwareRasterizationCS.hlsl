@@ -167,7 +167,7 @@ void RasterMain(uint3 Gid : SV_GroupID, uint3 DTid : SV_DispatchThreadID, uint3 
     edges[1] = screenPos[2] - screenPos[1];
     edges[2] = screenPos[0] - screenPos[2];
 
-    float area = EdgeFunc(edges[2], edges[0]);
+    float area = EdgeFunc(edges[0], edges[2]);
     if (area <= 0.0001)
         return;
 
@@ -179,12 +179,12 @@ void RasterMain(uint3 Gid : SV_GroupID, uint3 DTid : SV_DispatchThreadID, uint3 
         {
             float2 p = float2(x + 0.5, y + 0.5);
             
-#if 0 //LEFTTOP_RULE
-            float area0 = EdgeFunc(edges[0], p - screenPos[0]);
+#if 1 //LEFTTOP_RULE
+            float area0 = EdgeFunc(p - screenPos[0], edges[0]);
             if (area0 < 0.0 || area0 > area || (area0 == 0.0 && !IsLeftTopEdge(edges[0])))
                 continue;
 
-            float area1 = EdgeFunc(edges[1], p - screenPos[1]);
+            float area1 = EdgeFunc(p - screenPos[1], edges[1]);
             if (area1 < 0.0 || area1 > area || (area1 == 0.0 && !IsLeftTopEdge(edges[1])))
                 continue;
 
@@ -215,8 +215,8 @@ void RasterMain(uint3 Gid : SV_GroupID, uint3 DTid : SV_DispatchThreadID, uint3 
             value |= color.a << 24;
 
             value |= DTid.x << 32;
-            //InterlockedMax(Canvas[uint2(x, y)], value);
-            Canvas[uint2(x, y)] = value;
+            InterlockedMax(Canvas[uint2(x, y)], value);
+            //Canvas[uint2(x, y)] = value;
         }
     }
 }

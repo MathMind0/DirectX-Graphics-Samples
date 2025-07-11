@@ -32,7 +32,7 @@ D3D12SoftwareRasterization::D3D12SoftwareRasterization(UINT width, UINT height, 
 
 void D3D12SoftwareRasterization::OnInit()
 {
-    m_camera.Init({ 0.0f, 1.0f, 30.0f });
+    m_camera.Init({ 0.0f, 2.0f, 12.0f });
     m_camera.SetMoveSpeed(5.0f);
     m_camera.SetTurnSpeed(XM_PI / 8.f);
 
@@ -286,20 +286,30 @@ void D3D12SoftwareRasterization::CreateMeshBuffers()
 {
     Vertex Vertices[] = {
     {{1.f, 1.f, 0.f}, 0xFF},
+    {{0.f, 2.f, 0.f}, 0xFF00},
+    {{-1.f, 1.f, 0.f}, 0xFF0000},
+        
+    {{1.f, 0.f, 0.f}, 0xFF0000},    
     {{-1.f, 1.f, 0.f}, 0xFF00},
-    {{0.f, 2.f, 0.f}, 0xFF0000},
-    {{1.f, 0.f, 0.f}, 0xFF0000},
     {{-1.f, 0.f, 0.f}, 0xFF},
-    {{-1.f, 1.f, 0.f}, 0xFF00},
+        
     {{1.f, 0.f, 0.f}, 0xFFFFFF},
+    {{1.f, 1.f, 0.f}, 0xFF0000},
     {{-1.f, 1.f, 0.f}, 0xFFFFFF},
-    {{1.f, 1.f, 0.f}, 0xFF0000}};
+    
+    {{5.f, 0.f, -5.f}, 0xFF0000},
+    {{-5.f, 0.f, -5.f}, 0xFF},
+    {{-5.f, 0.f, 5.f}, 0xFF00},
+    {{5.f, 0.f, 5.f}, 0xFFFFFF}};
 
     size_t szVertexBuffer = sizeof(Vertices);
-    
-    uint32_t Indices[] = {0, 1, 2, 3, 4, 5, 6, 7, 8, 9};
+
+    //uint32_t Indices[] = {0, 1, 2};
+    //uint32_t Indices[] = {9, 10, 11, 9, 11, 12};
+    uint32_t Indices[] = {0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 9, 11, 12};
     size_t szIndexBuffer = sizeof(Indices);
 
+    static_assert(_countof(Indices) % 3 == 0, "The number of indices must be a multiple of 3.");
     m_numTriangles = _countof(Indices) / 3;
     
     ThrowIfFailed(m_device->CreateCommittedResource(
