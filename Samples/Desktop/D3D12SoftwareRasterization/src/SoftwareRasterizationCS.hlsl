@@ -27,6 +27,11 @@ float EdgeFunc(float2 edge0, float2 edge1)
     return edge0.x * edge1.y - edge0.y * edge1.x;
 }
 
+bool IsLeftTopEdge(float2 edge)
+{
+    return edge.y < 0.0 || (edge.y == 0.0 && edge.x > 0.0);
+}
+
 StructuredBuffer<Vertex> Vertices : register(t0);
 StructuredBuffer<uint3> Indices : register(t1);
 RWTexture2D<uint64_t> Canvas: register(u0);    
@@ -174,6 +179,19 @@ void RasterMain(uint3 Gid : SV_GroupID, uint3 DTid : SV_DispatchThreadID, uint3 
         {
             float2 p = float2(x + 0.5, y + 0.5);
             
+#if 0 //LEFTTOP_RULE
+            float area0 = EdgeFunc(edges[0], p - screenPos[0]);
+            if (area0 < 0.0 || area0 > area || (area0 == 0.0 && !IsLeftTopEdge(edges[0])))
+                continue;
+
+            float area1 = EdgeFunc(edges[1], p - screenPos[1]);
+            if (area1 < 0.0 || area1 > area || (area1 == 0.0 && !IsLeftTopEdge(edges[1])))
+                continue;
+
+            float area2 = area - area0 - area1;
+            if (area2 < 0.0 || (area2 == 0.0 && !IsLeftTopEdge(edges[2])))
+                continue;
+#else
             float area0 = EdgeFunc(edges[0], p - screenPos[0]);
             if (area0 < 0.0 || area0 > area)
                 continue;
@@ -185,17 +203,19 @@ void RasterMain(uint3 Gid : SV_GroupID, uint3 DTid : SV_DispatchThreadID, uint3 
             float area2 = area - area0 - area1;
             if (area2 < 0.0)
                 continue;
-
-            float w0 = area0 * invArea;
-            float w1 = area1 * invArea;
-            float w2 = area2 * invArea;
+#endif
+            float w0 = area1 * invArea;
+            float w1 = area2 * invArea;
+            float w2 = area0 * invArea;
 
             uint4 color = w0 * colors[0] + w1 * colors[1] + w2 * colors[2];
             uint64_t value = color.r;
             value |= color.g << 8;
             value |= color.b << 16;
             value |= color.a << 24;
-            
+
+            value |= DTid.x << 32;
+            //InterlockedMax(Canvas[uint2(x, y)], value);
             Canvas[uint2(x, y)] = value;
         }
     }

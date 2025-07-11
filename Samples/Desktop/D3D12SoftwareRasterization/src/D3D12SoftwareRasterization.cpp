@@ -32,8 +32,9 @@ D3D12SoftwareRasterization::D3D12SoftwareRasterization(UINT width, UINT height, 
 
 void D3D12SoftwareRasterization::OnInit()
 {
-    m_camera.Init({ 0.0f, 0.0f, 5.0f });
-    m_camera.SetMoveSpeed(250.0f);
+    m_camera.Init({ 0.0f, 1.0f, 30.0f });
+    m_camera.SetMoveSpeed(5.0f);
+    m_camera.SetTurnSpeed(XM_PI / 8.f);
 
     LoadPipeline();
     LoadAssets();
@@ -284,13 +285,19 @@ void D3D12SoftwareRasterization::CreatePSOs()
 void D3D12SoftwareRasterization::CreateMeshBuffers()
 {
     Vertex Vertices[] = {
-    {{1.f, 0.f, 0.f}, 0xFF},
-    {{-1.f, 0.f, 0.f}, 0xFF00},
-    {{0.f, 1.f, 0.f}, 0xFF0000}};
+    {{1.f, 1.f, 0.f}, 0xFF},
+    {{-1.f, 1.f, 0.f}, 0xFF00},
+    {{0.f, 2.f, 0.f}, 0xFF0000},
+    {{1.f, 0.f, 0.f}, 0xFF0000},
+    {{-1.f, 0.f, 0.f}, 0xFF},
+    {{-1.f, 1.f, 0.f}, 0xFF00},
+    {{1.f, 0.f, 0.f}, 0xFFFFFF},
+    {{-1.f, 1.f, 0.f}, 0xFFFFFF},
+    {{1.f, 1.f, 0.f}, 0xFF0000}};
 
     size_t szVertexBuffer = sizeof(Vertices);
     
-    uint32_t Indices[] = {0, 1, 2};
+    uint32_t Indices[] = {0, 1, 2, 3, 4, 5, 6, 7, 8, 9};
     size_t szIndexBuffer = sizeof(Indices);
 
     m_numTriangles = _countof(Indices) / 3;
