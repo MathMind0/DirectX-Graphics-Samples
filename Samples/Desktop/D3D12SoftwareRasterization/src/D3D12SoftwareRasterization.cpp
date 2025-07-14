@@ -475,7 +475,7 @@ void D3D12SoftwareRasterization::OnUpdate()
 
     ConstantBuffer constantBuffer = {};
     XMStoreFloat4x4(&constantBuffer.matMVP, XMMatrixMultiply(m_camera.GetViewMatrix(),
-        m_camera.GetProjectionMatrix(0.8f, m_aspectRatio, 1.0f, 5000.0f)));
+        m_camera.GetProjectionMatrix(0.8f, m_aspectRatio, 0.01f, 500.0f)));
     constantBuffer.szCanvas.x = m_frameWidth;
     constantBuffer.szCanvas.y = m_frameHeight;
     constantBuffer.numTriangles.x = m_numTriangles;

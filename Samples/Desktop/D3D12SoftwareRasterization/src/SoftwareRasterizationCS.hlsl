@@ -42,7 +42,8 @@ void RasterInit(uint2 DTid : SV_DispatchThreadID)
 {
     if (all(DTid.xy < szCanvas.xy))
     {
-        Canvas[DTid] = 0xFFFFFFFF00000000;
+        //Canvas[DTid] = 0xFFFFFFFF00000000;
+        Canvas[DTid] = 0;
     }
 }
 
@@ -136,6 +137,7 @@ void RasterMain(uint3 Gid : SV_GroupID, uint3 DTid : SV_DispatchThreadID, uint3 
     uint3 index = Indices[DTid.x];
 
     Vertex vertices[3];
+    float4 posH[3];
     float2 screenPos[3];
     uint4 colors[3];
     
@@ -143,10 +145,10 @@ void RasterMain(uint3 Gid : SV_GroupID, uint3 DTid : SV_DispatchThreadID, uint3 
     {
         vertices[i] = Vertices.Load(index[i]);
 
-        float4 posH = mul(matMVP, float4(vertices[i].position, 1.0));
-        float invz = 1.0 / posH.w; 
+        posH[i] = mul(matMVP, float4(vertices[i].position, 1.0));
+        float invz = 1.0 / posH[i].w; 
 
-        vertices[i].position = posH.xyz * invz;
+        vertices[i].position = posH[i].xyz * invz;
 
         screenPos[i] = (vertices[i].position.xy * float2(0.5, -0.5) + 0.5) * szCanvas;
         
@@ -214,9 +216,10 @@ void RasterMain(uint3 Gid : SV_GroupID, uint3 DTid : SV_DispatchThreadID, uint3 
             value |= color.b << 16;
             value |= color.a << 24;
 
-            float depth = w0 * vertices[0].position.z + w1 * vertices[1].position.z + w2 * vertices[2].position.z;
+            float depth = -(w0 * posH[0].w + w1 * posH[1].w + w2 * posH[2].w);
             value |= uint64_t(depth * 0xFFFF) << 32;
-            InterlockedMin(Canvas[uint2(x, y)], value);
+            InterlockedMax(Canvas[uint2(x, y)], value);
+            //InterlockedMin(Canvas[uint2(x, y)], value);
             //Canvas[uint2(x, y)] = value;
         }
     }
