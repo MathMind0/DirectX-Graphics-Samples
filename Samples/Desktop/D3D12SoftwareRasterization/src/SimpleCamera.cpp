@@ -62,11 +62,16 @@ void SimpleCamera::Update(float elapsedSeconds)
         move.z -= 1.0f;
     if (m_keysPressed.s)
         move.z += 1.0f;
+    if (m_keysPressed.q)
+        move.y += 1.0f;
+    if (m_keysPressed.e)
+        move.y -= 1.0f;
 
-    if (fabs(move.x) > 0.1f && fabs(move.z) > 0.1f)
+    if (fabs(move.x) > 0.1f && fabs(move.y) > 0.1f && fabs(move.z) > 0.1f)
     {
         XMVECTOR vector = XMVector3Normalize(XMLoadFloat3(&move));
         move.x = XMVectorGetX(vector);
+        move.y = XMVectorGetY(vector);
         move.z = XMVectorGetZ(vector);
     }
 
@@ -91,6 +96,7 @@ void SimpleCamera::Update(float elapsedSeconds)
     float z = move.x * sinf(m_yaw) - move.z * cosf(m_yaw);
     m_position.x += x * moveInterval;
     m_position.z += z * moveInterval;
+    m_position.y += move.y * moveInterval;
 
     // Determine the look direction.
     float r = cosf(m_pitch);
@@ -125,6 +131,12 @@ void SimpleCamera::OnKeyDown(WPARAM key)
     case 'D':
         m_keysPressed.d = true;
         break;
+    case 'Q':
+        m_keysPressed.q = true;
+        break;
+    case 'E':
+        m_keysPressed.e = true;
+        break;
     case VK_LEFT:
         m_keysPressed.left = true;
         break;
@@ -158,6 +170,12 @@ void SimpleCamera::OnKeyUp(WPARAM key)
         break;
     case 'D':
         m_keysPressed.d = false;
+        break;
+    case 'Q':
+        m_keysPressed.q = false;
+        break;
+    case 'E':
+        m_keysPressed.e = false;
         break;
     case VK_LEFT:
         m_keysPressed.left = false;

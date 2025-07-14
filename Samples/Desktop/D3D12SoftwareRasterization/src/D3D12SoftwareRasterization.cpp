@@ -297,10 +297,10 @@ void D3D12SoftwareRasterization::CreateMeshBuffers()
     {{1.f, 1.f, 0.f}, 0xFF0000},
     {{-1.f, 1.f, 0.f}, 0xFFFFFF},
     
-    {{5.f, 0.f, -5.f}, 0xFF0000},
-    {{-5.f, 0.f, -5.f}, 0xFF},
-    {{-5.f, 0.f, 5.f}, 0xFF00},
-    {{5.f, 0.f, 5.f}, 0xFFFFFF}};
+    {{5.f, 0.f, -5.f}, 0x808080},
+    {{-5.f, 0.f, -5.f}, 0x808080},
+    {{-5.f, 0.f, 5.f}, 0x808080},
+    {{5.f, 0.f, 5.f}, 0x808080}};
 
     size_t szVertexBuffer = sizeof(Vertices);
 
@@ -474,7 +474,8 @@ void D3D12SoftwareRasterization::OnUpdate()
     m_camera.Update(static_cast<float>(m_timer.GetElapsedSeconds()));
 
     ConstantBuffer constantBuffer = {};
-    XMStoreFloat4x4(&constantBuffer.matMVP, XMMatrixMultiply(m_camera.GetViewMatrix(), m_camera.GetProjectionMatrix(0.8f, m_aspectRatio, 1.0f, 5000.0f)));
+    XMStoreFloat4x4(&constantBuffer.matMVP, XMMatrixMultiply(m_camera.GetViewMatrix(),
+        m_camera.GetProjectionMatrix(0.8f, m_aspectRatio, 1.0f, 5000.0f)));
     constantBuffer.szCanvas.x = m_frameWidth;
     constantBuffer.szCanvas.y = m_frameHeight;
     constantBuffer.numTriangles.x = m_numTriangles;
