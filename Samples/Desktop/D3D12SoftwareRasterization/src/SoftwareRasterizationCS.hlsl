@@ -42,8 +42,8 @@ void RasterInit(uint2 DTid : SV_DispatchThreadID)
 {
     if (all(DTid.xy < szCanvas.xy))
     {
-        //Canvas[DTid] = 0xFFFFFFFF00000000;
-        Canvas[DTid] = 0;
+        Canvas[DTid] = 0xFFFFFFFF00000000;
+        //Canvas[DTid] = 0;
     }
 }
 
@@ -216,11 +216,17 @@ void RasterMain(uint3 Gid : SV_GroupID, uint3 DTid : SV_DispatchThreadID, uint3 
             value |= color.b << 16;
             value |= color.a << 24;
 
-            float depth = -(w0 * posH[0].w + w1 * posH[1].w + w2 * posH[2].w);
-            value |= uint64_t(depth * 0xFFFF) << 32;
-            InterlockedMax(Canvas[uint2(x, y)], value);
-            //InterlockedMin(Canvas[uint2(x, y)], value);
             //Canvas[uint2(x, y)] = value;
+            
+#if 0 //NAIVE_DEPTH_INTERPOLATION
+            float depth = w0 * posH[0].w + w1 * posH[1].w + w2 * posH[2].w;
+            value |= uint64_t(depth * 0xFFFF) << 32;
+            InterlockedMin(Canvas[uint2(x, y)], value);
+#else
+            float depth = w0 * vertices[0].position.z + w1 * vertices[1].position.z + w2 * vertices[2].position.z;
+            value |= uint64_t(depth * 0xFFFFFF) << 32;
+            InterlockedMin(Canvas[uint2(x, y)], value);
+#endif
         }
     }
 }
