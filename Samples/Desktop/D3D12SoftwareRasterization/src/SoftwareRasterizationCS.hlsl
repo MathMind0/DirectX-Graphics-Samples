@@ -225,7 +225,8 @@ void RasterMain(uint3 Gid : SV_GroupID, uint3 DTid : SV_DispatchThreadID, uint3 
             w2 *= vertices[2].position.z;
             
             float depth = w0 + w1 + w2;
-            uint4 color = w0 * colors[0] + w1 * colors[1] + w2 * colors[2];
+            float invDepth = 1.0 / depth;
+            uint4 color = (w0 * colors[0] + w1 * colors[1] + w2 * colors[2]) * invDepth;
 
             uint64_t value = color.r;
             value |= color.g << 8;
