@@ -210,23 +210,32 @@ void RasterMain(uint3 Gid : SV_GroupID, uint3 DTid : SV_DispatchThreadID, uint3 
             float w1 = area2 * invArea;
             float w2 = area0 * invArea;
 
+#if 0 //NAIVE_DEPTH_INTERPOLATION            
+            float depth = w0 * posH[0].w + w1 * posH[1].w + w2 * posH[2].w;
             uint4 color = w0 * colors[0] + w1 * colors[1] + w2 * colors[2];
+            
             uint64_t value = color.r;
             value |= color.g << 8;
             value |= color.b << 16;
             value |= color.a << 24;
-
-            //Canvas[uint2(x, y)] = value;
-            
-#if 0 //NAIVE_DEPTH_INTERPOLATION
-            float depth = w0 * posH[0].w + w1 * posH[1].w + w2 * posH[2].w;
             value |= uint64_t(depth * 0xFFFF) << 32;
-            InterlockedMin(Canvas[uint2(x, y)], value);
 #else
-            float depth = w0 * vertices[0].position.z + w1 * vertices[1].position.z + w2 * vertices[2].position.z;
+            w0 *= vertices[0].position.z;
+            w1 *= vertices[1].position.z;
+            w2 *= vertices[2].position.z;
+            
+            float depth = w0 + w1 + w2;
+            uint4 color = w0 * colors[0] + w1 * colors[1] + w2 * colors[2];
+
+            uint64_t value = color.r;
+            value |= color.g << 8;
+            value |= color.b << 16;
+            value |= color.a << 24;
             value |= uint64_t(depth * 0xFFFFFF) << 32;
-            InterlockedMin(Canvas[uint2(x, y)], value);
 #endif
+
+            InterlockedMin(Canvas[uint2(x, y)], value);
+            //Canvas[uint2(x, y)] = value;
         }
     }
 }
