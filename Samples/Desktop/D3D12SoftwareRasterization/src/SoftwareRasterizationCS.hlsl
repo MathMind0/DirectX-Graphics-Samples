@@ -2,7 +2,9 @@
     "CBV(b0)," \
     "SRV(t0)," \
     "SRV(t1)," \
-    "DescriptorTable( UAV(u0) )"
+    "DescriptorTable( SRV(t2) )," \
+    "DescriptorTable( UAV(u0) )," \
+    "StaticSampler(s0, filter=FILTER_MIN_MAG_MIP_LINEAR)"
 
 #define GROUPSIZEX 16
 #define GROUPSIZEY 16
@@ -20,6 +22,7 @@ struct Vertex
 {
     float3  position;
     uint    color;
+    float2  uv;
 };
 
 float EdgeFunc(float2 edge0, float2 edge1)
@@ -34,7 +37,9 @@ bool IsLeftTopEdge(float2 edge)
 
 StructuredBuffer<Vertex> Vertices : register(t0);
 StructuredBuffer<uint3> Indices : register(t1);
-RWTexture2D<uint64_t> Canvas: register(u0);    
+Texture2D Texture : register(t2);
+RWTexture2D<uint64_t> Canvas: register(u0);
+SamplerState TrilinearClamp : register(s0);
 
 [RootSignature(RootSig)]
 [numthreads(8, 8, 1)]
@@ -129,7 +134,7 @@ void RasterMain(uint3 Gid : SV_GroupID, uint3 DTid : SV_DispatchThreadID, uint3 
 #if 1 //RASTER_BARYCENTRIC
 [RootSignature(RootSig)]
 [numthreads(64, 1, 1)]
-void RasterMain(uint3 Gid : SV_GroupID, uint3 DTid : SV_DispatchThreadID, uint3 GTid : SV_GroupThreadID, uint GI : SV_GroupIndex)
+void RasterMain(uint3 DTid : SV_DispatchThreadID)
 {
     if (DTid.x > numTriangles.x)
         return;
@@ -150,7 +155,7 @@ void RasterMain(uint3 Gid : SV_GroupID, uint3 DTid : SV_DispatchThreadID, uint3 
 
         vertices[i].position = posH[i].xyz * invz;
 
-        screenPos[i] = (vertices[i].position.xy * float2(0.5, -0.5) + 0.5) * szCanvas;
+        screenPos[i] = (vertices[i].position.xy * float2(0.5, -0.5) + 0.5) * szCanvas.xy;
         
         colors[i].r = vertices[i].color & 0xFF;
         colors[i].g = (vertices[i].color >> 8) & 0xFF;
@@ -213,6 +218,8 @@ void RasterMain(uint3 Gid : SV_GroupID, uint3 DTid : SV_DispatchThreadID, uint3 
 #if 0 //NAIVE_DEPTH_INTERPOLATION            
             float depth = w0 * posH[0].w + w1 * posH[1].w + w2 * posH[2].w;
             uint4 color = w0 * colors[0] + w1 * colors[1] + w2 * colors[2];
+            float2 uv = w0 * vertices[0].uv + w1 * vertices[1].uv + w2 * vertices[2].uv;
+            color *= Texture.SampleLevel(TrilinearClamp, uv, 0).r;
             
             uint64_t value = color.r;
             value |= color.g << 8;
@@ -220,19 +227,21 @@ void RasterMain(uint3 Gid : SV_GroupID, uint3 DTid : SV_DispatchThreadID, uint3 
             value |= color.a << 24;
             value |= uint64_t(depth * 0xFFFF) << 32;
 #else
-            w0 *= vertices[0].position.z;
-            w1 *= vertices[1].position.z;
-            w2 *= vertices[2].position.z;
+            w0 /= posH[0].w;
+            w1 /= posH[1].w;
+            w2 /= posH[2].w;
             
-            float depth = w0 + w1 + w2;
-            float invDepth = 1.0 / depth;
-            uint4 color = (w0 * colors[0] + w1 * colors[1] + w2 * colors[2]) * invDepth;
+            float invDepth = w0 + w1 + w2;
+            float depth = 1.0 / invDepth;
+            uint4 color = (w0 * colors[0] + w1 * colors[1] + w2 * colors[2]) * depth;
+            float2 uv = (w0 * vertices[0].uv + w1 * vertices[1].uv + w2 * vertices[2].uv) * depth;
+            color *= Texture.SampleLevel(TrilinearClamp, uv, 0).r;
 
             uint64_t value = color.r;
             value |= color.g << 8;
             value |= color.b << 16;
             value |= color.a << 24;
-            value |= uint64_t(depth * 0xFFFFFF) << 32;
+            value |= uint64_t(depth * 0xFFFF) << 32;
 #endif
 
             InterlockedMin(Canvas[uint2(x, y)], value);

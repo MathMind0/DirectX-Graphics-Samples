@@ -20,8 +20,8 @@ D3D12SoftwareRasterization::D3D12SoftwareRasterization(UINT width, UINT height, 
     m_currentFenceValue(0),
     m_frameFenceValues{}
 {
-    m_frameWidth = static_cast<UINT>(ceilf(static_cast<float>(m_width) / FrameScale));
-    m_frameHeight = static_cast<UINT>(ceilf(static_cast<float>(m_height) / FrameScale));
+    m_frameWidth = static_cast<UINT>(ceilf(static_cast<float>(m_width) / FRAME_SCALE));
+    m_frameHeight = static_cast<UINT>(ceilf(static_cast<float>(m_height) / FRAME_SCALE));
 
     m_viewport = CD3DX12_VIEWPORT(0.f, 0.f,
         static_cast<float>(m_width), static_cast<float>(m_height));
@@ -32,7 +32,7 @@ D3D12SoftwareRasterization::D3D12SoftwareRasterization(UINT width, UINT height, 
 
 void D3D12SoftwareRasterization::OnInit()
 {
-    m_camera.Init({ 0.0f, 2.0f, 12.0f });
+    m_camera.Init({ 0.0f, 2.0f, 10.0f });
     m_camera.SetMoveSpeed(5.0f);
     m_camera.SetTurnSpeed(XM_PI / 8.f);
 
@@ -98,7 +98,7 @@ void D3D12SoftwareRasterization::LoadPipeline()
         ThrowIfFailed(m_device->CreateCommandQueue(&queueDesc, IID_PPV_ARGS(&m_commandQueueGraphics)));
         NAME_D3D12_OBJECT(m_commandQueueGraphics);
 
-        for (UINT n = 0; n < FrameCount; n++)
+        for (UINT n = 0; n < FRAME_COUNT; n++)
         {
             ThrowIfFailed(m_device->CreateCommandAllocator(D3D12_COMMAND_LIST_TYPE_DIRECT, IID_PPV_ARGS(&m_commandAllocatorGraphics[n])));
             NAME_D3D12_OBJECT_INDEXED(m_commandAllocatorGraphics, n);
@@ -112,7 +112,7 @@ void D3D12SoftwareRasterization::LoadPipeline()
     // Create the swap chain.
     {
         DXGI_SWAP_CHAIN_DESC1 swapChainDesc = {};
-        swapChainDesc.BufferCount = FrameCount;
+        swapChainDesc.BufferCount = FRAME_COUNT;
         swapChainDesc.Width = m_width;
         swapChainDesc.Height = m_height;
         swapChainDesc.Format = DXGI_FORMAT_R8G8B8A8_UNORM;
@@ -142,7 +142,7 @@ void D3D12SoftwareRasterization::LoadPipeline()
     {
         // Describe and create a render target view (RTV) descriptor heap.
         D3D12_DESCRIPTOR_HEAP_DESC rtvHeapDesc = {};
-        rtvHeapDesc.NumDescriptors = FrameCount;
+        rtvHeapDesc.NumDescriptors = FRAME_COUNT;
         rtvHeapDesc.Type = D3D12_DESCRIPTOR_HEAP_TYPE_RTV;
         rtvHeapDesc.Flags = D3D12_DESCRIPTOR_HEAP_FLAG_NONE;
         ThrowIfFailed(m_device->CreateDescriptorHeap(&rtvHeapDesc, IID_PPV_ARGS(&m_rtvHeap)));
@@ -196,7 +196,7 @@ void D3D12SoftwareRasterization::CreateRTs()
     CD3DX12_CPU_DESCRIPTOR_HANDLE rtvHandle(m_rtvHeap->GetCPUDescriptorHandleForHeapStart());
 
     // Create a RTV for each frame.
-    for (UINT n = 0; n < FrameCount; n++)
+    for (UINT n = 0; n < FRAME_COUNT; n++)
     {
         ThrowIfFailed(m_swapChain->GetBuffer(n, IID_PPV_ARGS(&m_renderTargets[n])));
         m_device->CreateRenderTargetView(m_renderTargets[n].Get(), nullptr, rtvHandle);
@@ -285,22 +285,22 @@ void D3D12SoftwareRasterization::CreatePSOs()
 void D3D12SoftwareRasterization::CreateMeshBuffers()
 {
     Vertex Vertices[] = {
-    {{1.f, 1.f, 0.f}, 0xFF},
-    {{0.f, 2.f, 0.f}, 0xFF00},
-    {{-1.f, 1.f, 0.f}, 0xFF0000},
+    {{1.f, 2.f, 0.f}, 0xFF, {1.f, 1.f}},
+    {{0.f, 4.f, 0.f}, 0xFF00, {0.5f, 0.f}},
+    {{-1.f, 2.f, 0.f}, 0xFF0000, {0.f, 1.f}},
         
-    {{1.f, 0.f, 0.f}, 0xFF0000},    
-    {{-1.f, 1.f, 0.f}, 0xFF00},
-    {{-1.f, 0.f, 0.f}, 0xFF},
+    {{1.f, 0.f, 0.f}, 0xFFFFFF, {1.f, 1.f}},    
+    {{-1.f, 2.f, 0.f}, 0xFFFFFF, {0.f, 0.f}},
+    {{-1.f, 0.f, 0.f}, 0xFFFFFF, {0.f, 1.f}},
         
-    {{1.f, 0.f, 0.f}, 0xFFFFFF},
-    {{1.f, 1.f, 0.f}, 0xFF0000},
-    {{-1.f, 1.f, 0.f}, 0xFFFFFF},
+    {{1.f, 0.f, 0.f}, 0xFFFFFF, {1.f, 1.f}},
+    {{1.f, 2.f, 0.f}, 0xFFFFFF, {1.f, 0.f}},
+    {{-1.f, 2.f, 0.f}, 0xFFFFFF, {0.f, 0.f}},
     
-    {{5.f, 0.f, -5.f}, 0x808080},
-    {{-5.f, 0.f, -5.f}, 0x808080},
-    {{-5.f, 0.f, 5.f}, 0x808080},
-    {{5.f, 0.f, 5.f}, 0x808080}};
+    {{5.f, 0.f, -5.f}, 0x808080, {1.f, 0.f}},
+    {{-5.f, 0.f, -5.f}, 0x808080, {0.f, 0.f}},
+    {{-5.f, 0.f, 5.f}, 0x808080, {0.f, 1.f}},
+    {{5.f, 0.f, 5.f}, 0x808080, {1.f, 1.f}}};
 
     size_t szVertexBuffer = sizeof(Vertices);
 
@@ -356,12 +356,12 @@ void D3D12SoftwareRasterization::CreateMeshBuffers()
     m_device->CreateShaderResourceView(m_vertexBuffer.Get(), &srvVertexBufferDesc, m_srvVertexBufferCpu);
 
     ThrowIfFailed(m_device->CreateCommittedResource(
-    &CD3DX12_HEAP_PROPERTIES(D3D12_HEAP_TYPE_DEFAULT),
-    D3D12_HEAP_FLAG_NONE,
-    &CD3DX12_RESOURCE_DESC::Buffer(szIndexBuffer),
-    D3D12_RESOURCE_STATE_COMMON,
-    nullptr,
-    IID_PPV_ARGS(&m_indexBuffer)));
+        &CD3DX12_HEAP_PROPERTIES(D3D12_HEAP_TYPE_DEFAULT),
+        D3D12_HEAP_FLAG_NONE,
+        &CD3DX12_RESOURCE_DESC::Buffer(szIndexBuffer),
+        D3D12_RESOURCE_STATE_COMMON,
+        nullptr,
+        IID_PPV_ARGS(&m_indexBuffer)));
 
     ThrowIfFailed(m_device->CreateCommittedResource(
         &CD3DX12_HEAP_PROPERTIES(D3D12_HEAP_TYPE_UPLOAD),
@@ -397,6 +397,67 @@ void D3D12SoftwareRasterization::CreateMeshBuffers()
     srvIndexBufferDesc.Buffer.StructureByteStride = sizeof(uint32_t) * 3;
 
     m_device->CreateShaderResourceView(m_indexBuffer.Get(), &srvIndexBufferDesc, m_srvIndexBufferCpu);
+
+    CD3DX12_RESOURCE_DESC descTexture = CD3DX12_RESOURCE_DESC::Tex2D(
+        DXGI_FORMAT_R8_UNORM,
+        TEXTURE_SIZE,
+        TEXTURE_SIZE,
+        1, 1, 1, 0,
+        D3D12_RESOURCE_FLAG_NONE);
+        
+    ThrowIfFailed(m_device->CreateCommittedResource(
+        &CD3DX12_HEAP_PROPERTIES(D3D12_HEAP_TYPE_DEFAULT),
+        D3D12_HEAP_FLAG_NONE,
+        &descTexture,
+        D3D12_RESOURCE_STATE_COMMON,
+        nullptr,
+        IID_PPV_ARGS(&m_texture)));
+
+    ThrowIfFailed(m_device->CreateCommittedResource(
+        &CD3DX12_HEAP_PROPERTIES(D3D12_HEAP_TYPE_UPLOAD),
+        D3D12_HEAP_FLAG_NONE,
+        &CD3DX12_RESOURCE_DESC::Buffer(TEXTURE_SIZE * TEXTURE_SIZE),
+        D3D12_RESOURCE_STATE_GENERIC_READ,
+        nullptr,
+        IID_PPV_ARGS(&m_textureUpload)));
+
+    NAME_D3D12_OBJECT(m_texture);
+
+    std::vector<uint8_t> data(TEXTURE_SIZE * TEXTURE_SIZE);
+    static constexpr UINT BLOCK_SIZE = 32;
+    for (UINT i = 0; i < TEXTURE_SIZE; i++)
+    {
+        UINT row = i / BLOCK_SIZE;
+        for (UINT j = 0; j < TEXTURE_SIZE; j++)
+        {
+            UINT col = j / BLOCK_SIZE;
+            data[i * TEXTURE_SIZE + j] = ((row + col) & 0x01) ? 0 : 255;
+        }
+    }
+
+    D3D12_SUBRESOURCE_DATA textureData = {};
+    textureData.pData = data.data();
+    textureData.RowPitch = TEXTURE_SIZE;
+    textureData.SlicePitch = textureData.RowPitch * TEXTURE_SIZE;
+
+    UpdateSubresources<1>(m_commandListGraphics.Get(), m_texture.Get(), m_textureUpload.Get(),
+    0, 0, 1, &textureData);
+    m_commandListGraphics->ResourceBarrier(1,
+        &CD3DX12_RESOURCE_BARRIER::Transition(m_texture.Get(),
+            D3D12_RESOURCE_STATE_COPY_DEST, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE));
+    
+    m_srvTextureCpu = CD3DX12_CPU_DESCRIPTOR_HANDLE(m_srvUavHeap->GetCPUDescriptorHandleForHeapStart(),
+        (INT)SRV_TEXTURE, m_srvUavDescriptorSize);
+    m_srvTextureGpu = CD3DX12_GPU_DESCRIPTOR_HANDLE(m_srvUavHeap->GetGPUDescriptorHandleForHeapStart(),
+        (INT)SRV_TEXTURE, m_srvUavDescriptorSize);
+    
+    D3D12_SHADER_RESOURCE_VIEW_DESC srvTextureDesc = {};
+    srvTextureDesc.Format = DXGI_FORMAT_UNKNOWN;
+    srvTextureDesc.ViewDimension = D3D12_SRV_DIMENSION_TEXTURE2D;
+    srvTextureDesc.Shader4ComponentMapping = D3D12_DEFAULT_SHADER_4_COMPONENT_MAPPING;
+    srvTextureDesc.Texture2D.MipLevels = 1;
+
+    m_device->CreateShaderResourceView(m_texture.Get(), &srvTextureDesc, m_srvTextureCpu);
 }
 
 void D3D12SoftwareRasterization::CreateFrameBuffer()
@@ -449,7 +510,7 @@ void D3D12SoftwareRasterization::CreateConstantBuffer()
 {
     CD3DX12_RANGE readRange(0, 0); // We do not intend to read from this resource on the CPU.
     
-    for (UINT i = 0; i < FrameCount; i++)
+    for (UINT i = 0; i < FRAME_COUNT; i++)
     {
         ThrowIfFailed(m_device->CreateCommittedResource(
              &CD3DX12_HEAP_PROPERTIES(D3D12_HEAP_TYPE_UPLOAD),
@@ -475,7 +536,7 @@ void D3D12SoftwareRasterization::OnUpdate()
 
     ConstantBuffer constantBuffer = {};
     XMStoreFloat4x4(&constantBuffer.matMVP, XMMatrixMultiply(m_camera.GetViewMatrix(),
-        m_camera.GetProjectionMatrix(0.8f, m_aspectRatio, 0.01f, 500.0f)));
+        m_camera.GetProjectionMatrix(XM_PI / 3.f, m_aspectRatio, 0.1f, 500.0f)));
     constantBuffer.szCanvas.x = m_frameWidth;
     constantBuffer.szCanvas.y = m_frameHeight;
     constantBuffer.numTriangles.x = m_numTriangles;
@@ -525,7 +586,7 @@ void D3D12SoftwareRasterization::OnRender()
 // Release sample's D3D objects.
 void D3D12SoftwareRasterization::ReleaseD3DResources()
 {
-    for (UINT n = 0; n < FrameCount; n++)
+    for (UINT n = 0; n < FRAME_COUNT; n++)
     {
         m_renderTargets[n].Reset();
     }
@@ -541,6 +602,8 @@ void D3D12SoftwareRasterization::ReleaseD3DResources()
     m_vertexBufferUpload.Reset();
     m_indexBuffer.Reset();
     m_indexBufferUpload.Reset();
+    m_texture.Reset();
+    m_textureUpload.Reset();
     
     m_rtvHeap.Reset();
     m_srvUavHeap.Reset();
@@ -602,7 +665,8 @@ void D3D12SoftwareRasterization::PopulateCommandList()
         m_commandListGraphics->SetComputeRootConstantBufferView(0, m_constantBuffer[m_frameIndex]->GetGPUVirtualAddress());
         m_commandListGraphics->SetComputeRootShaderResourceView(1, m_vertexBuffer->GetGPUVirtualAddress());
         m_commandListGraphics->SetComputeRootShaderResourceView(2, m_indexBuffer->GetGPUVirtualAddress());
-        m_commandListGraphics->SetComputeRootDescriptorTable(3, m_uavRasterCanvasGpu);
+        m_commandListGraphics->SetComputeRootDescriptorTable(3, m_srvTextureGpu);
+        m_commandListGraphics->SetComputeRootDescriptorTable(4, m_uavRasterCanvasGpu);
         m_commandListGraphics->Dispatch((m_frameWidth + 7)/ 8, (m_frameWidth + 7)/ 8, 1);
 
         m_commandListGraphics->ResourceBarrier(1, &CD3DX12_RESOURCE_BARRIER::UAV(m_texRasterCanvas.Get()));
@@ -616,7 +680,8 @@ void D3D12SoftwareRasterization::PopulateCommandList()
         m_commandListGraphics->SetComputeRootConstantBufferView(0, m_constantBuffer[m_frameIndex]->GetGPUVirtualAddress());
         m_commandListGraphics->SetComputeRootShaderResourceView(1, m_vertexBuffer->GetGPUVirtualAddress());
         m_commandListGraphics->SetComputeRootShaderResourceView(2, m_indexBuffer->GetGPUVirtualAddress());
-        m_commandListGraphics->SetComputeRootDescriptorTable(3, m_uavRasterCanvasGpu);
+        m_commandListGraphics->SetComputeRootDescriptorTable(3, m_srvTextureGpu);
+        m_commandListGraphics->SetComputeRootDescriptorTable(4, m_uavRasterCanvasGpu);
         m_commandListGraphics->Dispatch(1, 1, 1);
 
         m_commandListGraphics->ResourceBarrier(1, &CD3DX12_RESOURCE_BARRIER::Transition(

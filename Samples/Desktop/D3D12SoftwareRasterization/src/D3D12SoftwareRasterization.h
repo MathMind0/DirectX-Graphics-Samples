@@ -37,9 +37,9 @@ public:
     virtual void OnKeyUp(UINT8 key);
 
 private:
-    static constexpr UINT FrameCount = 2;
-    UINT m_frameWidth, m_frameHeight;
-    static constexpr float FrameScale = 8.f;
+    static constexpr UINT FRAME_COUNT = 2;
+    static constexpr float FRAME_SCALE = 1.f;
+    static constexpr UINT TEXTURE_SIZE = 256;
 
     struct alignas(256) ConstantBuffer
     {
@@ -56,6 +56,7 @@ private:
     {
         XMFLOAT3    position;
         UINT        color;
+        XMFLOAT2    uv;
     };
     
     // Pipeline objects.
@@ -63,11 +64,11 @@ private:
     ComPtr<IDXGISwapChain3> m_swapChain;
     ComPtr<ID3D12Device> m_device;
 
-    ComPtr<ID3D12Resource> m_renderTargets[FrameCount];
+    ComPtr<ID3D12Resource> m_renderTargets[FRAME_COUNT];
     D3D12_VIEWPORT m_viewport;
     CD3DX12_RECT m_scissorRect;
         
-    ComPtr<ID3D12CommandAllocator> m_commandAllocatorGraphics[FrameCount];
+    ComPtr<ID3D12CommandAllocator> m_commandAllocatorGraphics[FRAME_COUNT];
     ComPtr<ID3D12CommandQueue> m_commandQueueGraphics;
     ComPtr<ID3D12GraphicsCommandList> m_commandListGraphics;
 
@@ -94,14 +95,20 @@ private:
     D3D12_CPU_DESCRIPTOR_HANDLE m_srvIndexBufferCpu;
     UINT m_numTriangles;
     
-    ComPtr<ID3D12Resource> m_constantBuffer[FrameCount];
-    ConstantBuffer* m_pConstantBufferData[FrameCount];
+    ComPtr<ID3D12Resource> m_constantBuffer[FRAME_COUNT];
+    ConstantBuffer* m_pConstantBufferData[FRAME_COUNT];
 
+    UINT m_frameWidth, m_frameHeight;
     ComPtr<ID3D12Resource> m_texRasterCanvas;
     D3D12_GPU_DESCRIPTOR_HANDLE m_uavRasterCanvasGpu;
     D3D12_CPU_DESCRIPTOR_HANDLE m_uavRasterCanvasCpu;
     D3D12_GPU_DESCRIPTOR_HANDLE m_srvRasterCanvasGpu;
     D3D12_CPU_DESCRIPTOR_HANDLE m_srvRasterCanvasCpu;
+
+    ComPtr<ID3D12Resource> m_texture;
+    ComPtr<ID3D12Resource> m_textureUpload;
+    D3D12_GPU_DESCRIPTOR_HANDLE m_srvTextureGpu;
+    D3D12_CPU_DESCRIPTOR_HANDLE m_srvTextureCpu;
     
     UINT m_frameIndex;
     SimpleCamera m_camera;
@@ -111,16 +118,7 @@ private:
     ComPtr<ID3D12Fence> m_renderContextFence;
     UINT64 m_currentFenceValue;
     HANDLE m_renderContextFenceEvent;
-    UINT64 m_frameFenceValues[FrameCount];
-
-    // Indices of the root signature parameters.
-    enum ComputeRootParameters : UINT32
-    {
-        ComputeRootCBV = 0,
-        ComputeRootSRVTable,
-        ComputeRootUAVTable,
-        ComputeRootParametersCount
-    };
+    UINT64 m_frameFenceValues[FRAME_COUNT];
 
     // Indices of shader resources in the descriptor heap.
     enum DescriptorHeapIndex : UINT32
@@ -129,6 +127,7 @@ private:
         SRV_INDEX_BUFFER,
         SRV_FRAME_BUFFER,
         UAV_FRAME_BUFFER,
+        SRV_TEXTURE,
         DescriptorCount
     };
 
