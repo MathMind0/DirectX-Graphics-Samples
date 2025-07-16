@@ -431,7 +431,7 @@ void D3D12SoftwareRasterization::CreateMeshBuffers()
         for (UINT j = 0; j < TEXTURE_SIZE; j++)
         {
             UINT col = j / BLOCK_SIZE;
-            data[i * TEXTURE_SIZE + j] = ((row + col) & 0x01) ? 0 : 255;
+            data[i * TEXTURE_SIZE + j] = ((row + col) & 0x01) ? 64 : 255;
         }
     }
 

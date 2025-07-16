@@ -38,7 +38,7 @@ public:
 
 private:
     static constexpr UINT FRAME_COUNT = 2;
-    static constexpr float FRAME_SCALE = 1.f;
+    static constexpr float FRAME_SCALE = 4.f;
     static constexpr UINT TEXTURE_SIZE = 256;
 
     struct alignas(256) ConstantBuffer

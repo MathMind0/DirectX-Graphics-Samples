@@ -10,6 +10,7 @@
 #define GROUPSIZEY 16
 #define BLOCK_SIZE 16
 #define BLOCK_OFFSET 8
+#define COVERAGE_LEVEL 4
 
 cbuffer cbRasterization : register(b0)
 {
@@ -184,6 +185,39 @@ void RasterMain(uint3 DTid : SV_DispatchThreadID)
     {
         for (int x = topLeft.x; x < bottomRight.x; x++)
         {
+            int nSample = 0;
+            float2 sample;
+            float gap = 0.5 / COVERAGE_LEVEL;
+            
+            for (uint sy = 0; sy < COVERAGE_LEVEL; sy++)
+            {
+                sample.y = y + (2 * sy + 1) * gap;
+                
+                for (uint sx = 0; sx < COVERAGE_LEVEL; sx++)
+                {
+                    sample.x = x + (2 * sx + 1) * gap;
+                    
+                    float a0 = EdgeFunc(sample - screenPos[0], edges[0]);
+                    if (a0 < 0.0 || a0 > area || (a0 == 0.0 && !IsLeftTopEdge(edges[0])))
+                        continue;
+
+                    float a1 = EdgeFunc(sample - screenPos[1], edges[1]);
+                    if (a1 < 0.0 || a1 > area || (a1 == 0.0 && !IsLeftTopEdge(edges[1])))
+                        continue;
+
+                    float a2 = area - a0 - a1;
+                    if (a2 < 0.0 || (a2 == 0.0 && !IsLeftTopEdge(edges[2])))
+                        continue;
+
+                    nSample++;
+                }                
+            }
+
+            if (nSample == 0)
+                continue;
+
+            float coverage = (float)nSample / (COVERAGE_LEVEL * COVERAGE_LEVEL);
+            
             float2 p = float2(x + 0.5, y + 0.5);
             
 #if 1 //LEFTTOP_RULE
@@ -220,6 +254,7 @@ void RasterMain(uint3 DTid : SV_DispatchThreadID)
             uint4 color = w0 * colors[0] + w1 * colors[1] + w2 * colors[2];
             float2 uv = w0 * vertices[0].uv + w1 * vertices[1].uv + w2 * vertices[2].uv;
             color *= Texture.SampleLevel(TrilinearClamp, uv, 0).r;
+            color *= coverage;
             
             uint64_t value = color.r;
             value |= color.g << 8;
@@ -236,7 +271,8 @@ void RasterMain(uint3 DTid : SV_DispatchThreadID)
             uint4 color = (w0 * colors[0] + w1 * colors[1] + w2 * colors[2]) * depth;
             float2 uv = (w0 * vertices[0].uv + w1 * vertices[1].uv + w2 * vertices[2].uv) * depth;
             color *= Texture.SampleLevel(TrilinearClamp, uv, 0).r;
-
+            color *= coverage;
+            
             uint64_t value = color.r;
             value |= color.g << 8;
             value |= color.b << 16;
