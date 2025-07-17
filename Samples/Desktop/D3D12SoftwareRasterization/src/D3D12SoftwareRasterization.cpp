@@ -305,6 +305,7 @@ void D3D12SoftwareRasterization::CreateMeshBuffers()
     size_t szVertexBuffer = sizeof(Vertices);
 
     //uint32_t Indices[] = {0, 1, 2};
+    //uint32_t Indices[] = {3, 4, 5, 6, 7, 8};
     //uint32_t Indices[] = {9, 10, 11, 9, 11, 12};
     uint32_t Indices[] = {0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 9, 11, 12};
     size_t szIndexBuffer = sizeof(Indices);

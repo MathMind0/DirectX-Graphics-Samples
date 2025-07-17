@@ -132,7 +132,7 @@ void RasterMain(uint3 Gid : SV_GroupID, uint3 DTid : SV_DispatchThreadID, uint3 
 }
 #endif
 
-#if 1 //RASTER_BARYCENTRIC
+#if 0 //RASTER_BARYCENTRIC
 [RootSignature(RootSig)]
 [numthreads(64, 1, 1)]
 void RasterMain(uint3 DTid : SV_DispatchThreadID)
@@ -185,6 +185,8 @@ void RasterMain(uint3 DTid : SV_DispatchThreadID)
     {
         for (int x = topLeft.x; x < bottomRight.x; x++)
         {
+            float coverage = 1.0;
+#if 0 //NAIVE_MSAA
             int nSample = 0;
             float2 sample;
             float gap = 0.5 / COVERAGE_LEVEL;
@@ -216,7 +218,8 @@ void RasterMain(uint3 DTid : SV_DispatchThreadID)
             if (nSample == 0)
                 continue;
 
-            float coverage = (float)nSample / (COVERAGE_LEVEL * COVERAGE_LEVEL);
+            coverage = (float)nSample / (COVERAGE_LEVEL * COVERAGE_LEVEL);
+#endif
             
             float2 p = float2(x + 0.5, y + 0.5);
             
@@ -249,7 +252,7 @@ void RasterMain(uint3 DTid : SV_DispatchThreadID)
             float w1 = area2 * invArea;
             float w2 = area0 * invArea;
 
-#if 0 //NAIVE_DEPTH_INTERPOLATION            
+#if 0 //NAIVE_INTERPOLATION            
             float depth = w0 * posH[0].w + w1 * posH[1].w + w2 * posH[2].w;
             uint4 color = w0 * colors[0] + w1 * colors[1] + w2 * colors[2];
             float2 uv = w0 * vertices[0].uv + w1 * vertices[1].uv + w2 * vertices[2].uv;
@@ -282,6 +285,99 @@ void RasterMain(uint3 DTid : SV_DispatchThreadID)
 
             InterlockedMin(Canvas[uint2(x, y)], value);
             //Canvas[uint2(x, y)] = value;
+        }
+    }
+}
+#endif
+
+#if 1 //RASTER_STEP_VERSION
+[RootSignature(RootSig)]
+[numthreads(64, 1, 1)]
+void RasterMain(uint3 DTid : SV_DispatchThreadID)
+{
+    if (DTid.x > numTriangles.x)
+        return;
+
+    uint3 index = Indices[DTid.x];
+
+    Vertex vertices[3];
+    float4 posH[3];
+    float2 screenPos[3];
+    uint4 colors[3];
+    float invZ[3];
+    
+    for (int i = 0; i < 3; i++)
+    {
+        vertices[i] = Vertices.Load(index[i]);
+
+        posH[i] = mul(matMVP, float4(vertices[i].position, 1.0));
+        invZ[i] = 1.0 / posH[i].w; 
+
+        vertices[i].position = posH[i].xyz * invZ[i];
+
+        screenPos[i] = (vertices[i].position.xy * float2(0.5, -0.5) + 0.5) * szCanvas.xy;
+        
+        colors[i].r = vertices[i].color & 0xFF;
+        colors[i].g = (vertices[i].color >> 8) & 0xFF;
+        colors[i].b = (vertices[i].color >> 16) & 0xFF;
+        colors[i].a = (vertices[i].color >> 24) & 0xFF;
+    }
+
+    float2 screenPosMin = min(screenPos[0], min(screenPos[1], screenPos[2]));
+    float2 screenPosMax = max(screenPos[0], max(screenPos[1], screenPos[2]));
+
+    int2 topLeft = max(int2(0, 0), floor(screenPosMin));
+    int2 bottomRight = min(szCanvas - 1, floor(screenPosMax));
+
+    float2 edge0 = screenPos[1] - screenPos[0];
+    float2 edge1 = screenPos[2] - screenPos[1];
+    float2 edge2 = screenPos[0] - screenPos[2];
+
+    float area = EdgeFunc(edge0, edge2);
+    if (area <= 0.0001)
+        return;
+
+    float invArea = 1.0 / area;
+    
+    float2 delta0 = float2(edge1.y, -edge1.x) * invArea * invZ[0];
+    float2 delta1 = float2(edge2.y, -edge2.x) * invArea * invZ[1];
+    float2 delta2 = float2(edge0.y, -edge0.x) * invArea * invZ[2];
+
+    float2 start = topLeft.xy + 0.5;
+    float ww0 = EdgeFunc(start - screenPos[1], edge1) * invArea * invZ[0];
+    float ww1 = EdgeFunc(start - screenPos[2], edge2) * invArea * invZ[1];
+    float ww2 = EdgeFunc(start - screenPos[0], edge0) * invArea * invZ[2];
+        
+    for (int y = topLeft.y; y < bottomRight.y; y++, ww0 += delta0.y, ww1 += delta1.y, ww2 += delta2.y)
+    {
+        float w0 = ww0;
+        float w1 = ww1;
+        float w2 = ww2;
+        
+        for (int x = topLeft.x; x < bottomRight.x; x++, w0 += delta0.x, w1 += delta1.x, w2 += delta2.x)
+        {            
+            if (w0 < 0.0 || (w0 == 0.0 && !IsLeftTopEdge(edge1)))
+                continue;
+
+            if (w1 < 0.0 || (w1 == 0.0 && !IsLeftTopEdge(edge2)))
+                continue;
+            
+            if (w2 < 0.0 || (w2 == 0.0 && !IsLeftTopEdge(edge0)))
+                continue;
+            
+            float invDepth = w0 + w1 + w2;
+            float depth = 1.0 / invDepth;
+            uint4 color = (w0 * colors[0] + w1 * colors[1] + w2 * colors[2]) * depth;
+            float2 uv = (w0 * vertices[0].uv + w1 * vertices[1].uv + w2 * vertices[2].uv) * depth;
+            color *= Texture.SampleLevel(TrilinearClamp, uv, 0).r;
+            
+            uint64_t value = color.r;
+            value |= color.g << 8;
+            value |= color.b << 16;
+            value |= color.a << 24;
+            value |= uint64_t(depth * 0xFFFF) << 32;
+
+            InterlockedMin(Canvas[uint2(x, y)], value);
         }
     }
 }
