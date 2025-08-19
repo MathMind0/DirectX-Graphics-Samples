@@ -51,7 +51,7 @@ private:
     static constexpr UINT TriangleCount = 1000000;    
     static constexpr UINT ComputeThreadBlockSize = 64;       // Should match the value in compute.hlsl.
     static constexpr float TriangleHalfWidth = 0.01f;        // The x and y offsets used by the triangle vertices.
-    static constexpr XMFLOAT4 CullBox = XMFLOAT4(-1.0f, -1.0f, 1.0f, 1.0f);
+    static constexpr XMFLOAT4 CullBox = XMFLOAT4(-0.5f, -0.5f, 0.5f, 0.5f);
 
     // Vertex definition.
     struct Vertex
