@@ -13,6 +13,9 @@
 
 #include "DXSample.h"
 
+using namespace std;
+using namespace std::chrono;
+
 using namespace DirectX;
 
 // Note that while ComPtr is used to manage the lifetime of resources on the CPU,
@@ -21,6 +24,16 @@ using namespace DirectX;
 // referenced by the GPU.
 // An example of this can be found in the class method: OnDestroy().
 using Microsoft::WRL::ComPtr;
+
+// We pack the UAV counter into the same buffer as the commands rather than create
+// a separate 64K resource/heap for it. The counter must be aligned on 4K boundaries,
+// so we pad the command buffer (if necessary) such that the counter will be placed
+// at a valid location in the buffer.
+UINT inline constexpr AlignForUavCounter(UINT bufferSize)
+{
+    const UINT alignment = D3D12_UAV_COUNTER_PLACEMENT_ALIGNMENT;
+    return (bufferSize + (alignment - 1)) & ~(alignment - 1);
+}
 
 class D3D12ExecuteIndirect : public DXSample
 {
@@ -34,15 +47,11 @@ public:
     virtual void OnKeyDown(UINT8 key);
 
 private:
-    static const UINT FrameCount = 3;
-    static const UINT TriangleCount = 1024;
-    static const UINT TriangleResourceCount = TriangleCount * FrameCount;
-    static const UINT CommandSizePerFrame;                // The size of the indirect commands to draw all of the triangles in a single frame.
-    static const UINT CommandBufferCounterOffset;        // The offset of the UAV counter in the processed command buffer.
-    static const UINT ComputeThreadBlockSize = 128;        // Should match the value in compute.hlsl.
-    static const float TriangleHalfWidth;                // The x and y offsets used by the triangle vertices.
-    static const float TriangleDepth;                    // The z offset used by the triangle vertices.
-    static const float CullingCutoff;                    // The +/- x offset of the clipping planes in homogenous space [-1,1].
+    static constexpr UINT FrameCount = 2;
+    static constexpr UINT TriangleCount = 128;    
+    static constexpr UINT ComputeThreadBlockSize = 64;       // Should match the value in compute.hlsl.
+    static constexpr float TriangleHalfWidth = 0.01f;        // The x and y offsets used by the triangle vertices.
+    static constexpr XMFLOAT4 CullBox = XMFLOAT4(-1.0f, -1.0f, 1.0f, 1.0f);
 
     // Vertex definition.
     struct Vertex
@@ -51,38 +60,61 @@ private:
     };
 
     // Constant buffer definition.
-    struct SceneConstantBuffer
+    struct PrimitiveStaticDataCB
     {
-        XMFLOAT4 velocity;
-        XMFLOAT4 offset;
-        XMFLOAT4 color;
-        XMFLOAT4X4 projection;
+        XMFLOAT4 color;        
+        XMFLOAT2 velocity;
+        float    size;
+        float    rotation;
 
         // Constant buffers are 256-byte aligned. Add padding in the struct to allow multiple buffers
         // to be array-indexed.
-        float padding[36];
+        float padding[256 - 4 * 8];
     };
 
     // Root constants for the compute shader.
     struct CSRootConstants
     {
-        float xOffset;
-        float zOffset;
-        float cullOffset;
+        XMFLOAT4 cullBox;
         float commandCount;
+        float deltaTime;
     };
-
+    constexpr static UINT COMPUTE_CONST_VALUE_SLOTS = sizeof(CSRootConstants) / 4;
+    
     // Data structure to match the command signature used for ExecuteIndirect.
+    struct PrimitiveDynamicDataCB
+    {
+        XMFLOAT2 position;  
+        float angle;
+        float padding;
+    };
+    constexpr static UINT GRAPHICS_DYNAMIC_DATA_CONST_VALUES = sizeof(PrimitiveDynamicDataCB) / 4;
+
+    struct ViewDataCB
+    {
+        float ratio;
+    };
+    constexpr static UINT GRAPHICS_VIEW_DATA_CONST_VALUES = sizeof(ViewDataCB) / 4;
+    
     struct IndirectCommand
     {
-        D3D12_GPU_VIRTUAL_ADDRESS cbv;
+        D3D12_GPU_VIRTUAL_ADDRESS cbStaticData;
+        PrimitiveDynamicDataCB cbDynamicData;
         D3D12_DRAW_ARGUMENTS drawArguments;
     };
+
+
+    // The size of the indirect commands to draw all of the triangles in a single frame.
+    static constexpr UINT CommandSizePerFrame = TriangleCount * sizeof(IndirectCommand);               
+    // The offset of the UAV counter in the processed command buffer.
+    static constexpr UINT CommandBufferCounterOffset = AlignForUavCounter(CommandSizePerFrame); 
 
     // Graphics root signature parameter offsets.
     enum GraphicsRootParameters
     {
-        Cbv,
+        StaticData,
+        DynmicData,
+        ViewData,
         GraphicsRootParametersCount
     };
 
@@ -98,16 +130,19 @@ private:
     enum HeapOffsets
     {
         CbvSrvOffset = 0,                                                    // SRV that points to the constant buffers used by the rendering thread.
-        CommandsOffset = CbvSrvOffset + 1,                                    // SRV that points to all of the indirect commands.
+        CommandsOffset = CbvSrvOffset + 1,                                   // UAV that points to all of the indirect commands.
         ProcessedCommandsOffset = CommandsOffset + 1,                        // UAV that records the commands we actually want to execute.
-        CbvSrvUavDescriptorCountPerFrame = ProcessedCommandsOffset + 1        // 2 SRVs + 1 UAV for the compute shader.
+        CbvSrvUavDescriptorCountPerFrame = ProcessedCommandsOffset + 1       // 1 SRV + 2 UAVs for the compute shader.
     };
 
     // Each triangle gets its own constant buffer per frame.
-    std::vector<SceneConstantBuffer> m_constantBufferData;
+    std::vector<PrimitiveStaticDataCB> m_constantBufferData;
     UINT8* m_pCbvDataBegin;
 
     CSRootConstants m_csRootConstants;    // Constants for the compute shader.
+
+    ViewDataCB m_viewDataCB;
+    
     bool m_enableCulling;                // Toggle whether the compute shader pre-processes the indirect commands.
 
     // Pipeline objects.
@@ -118,9 +153,7 @@ private:
     ComPtr<ID3D12Device> m_device;
     ComPtr<ID3D12Resource> m_renderTargets[FrameCount];
     ComPtr<ID3D12CommandAllocator> m_commandAllocators[FrameCount];
-    ComPtr<ID3D12CommandAllocator> m_computeCommandAllocators[FrameCount];
     ComPtr<ID3D12CommandQueue> m_commandQueue;
-    ComPtr<ID3D12CommandQueue> m_computeCommandQueue;
     ComPtr<ID3D12RootSignature> m_rootSignature;
     ComPtr<ID3D12RootSignature> m_computeRootSignature;
     ComPtr<ID3D12CommandSignature> m_commandSignature;
@@ -130,10 +163,10 @@ private:
     UINT m_rtvDescriptorSize;
     UINT m_cbvSrvUavDescriptorSize;
     UINT m_frameIndex;
+    time_point<high_resolution_clock> m_lastFrameTime;
 
     // Synchronization objects.
     ComPtr<ID3D12Fence> m_fence;
-    ComPtr<ID3D12Fence> m_computeFence;
     UINT64 m_fenceValues[FrameCount];
     HANDLE m_fenceEvent;
 
@@ -141,12 +174,11 @@ private:
     ComPtr<ID3D12PipelineState> m_pipelineState;
     ComPtr<ID3D12PipelineState> m_computeState;
     ComPtr<ID3D12GraphicsCommandList> m_commandList;
-    ComPtr<ID3D12GraphicsCommandList> m_computeCommandList;
     ComPtr<ID3D12Resource> m_vertexBuffer;
     ComPtr<ID3D12Resource> m_constantBuffer;
     ComPtr<ID3D12Resource> m_depthStencil;
     ComPtr<ID3D12Resource> m_commandBuffer;
-    ComPtr<ID3D12Resource> m_processedCommandBuffers[FrameCount];
+    ComPtr<ID3D12Resource> m_processedCommandBuffer;
     ComPtr<ID3D12Resource> m_processedCommandBufferCounterReset;
     D3D12_VERTEX_BUFFER_VIEW m_vertexBufferView;
 
@@ -158,14 +190,4 @@ private:
     void PopulateCommandLists();
     void WaitForGpu();
     void MoveToNextFrame();
-
-    // We pack the UAV counter into the same buffer as the commands rather than create
-    // a separate 64K resource/heap for it. The counter must be aligned on 4K boundaries,
-    // so we pad the command buffer (if necessary) such that the counter will be placed
-    // at a valid location in the buffer.
-    static inline UINT AlignForUavCounter(UINT bufferSize)
-    {
-        const UINT alignment = D3D12_UAV_COUNTER_PLACEMENT_ALIGNMENT;
-        return (bufferSize + (alignment - 1)) & ~(alignment - 1);
-    }
 };

@@ -9,12 +9,23 @@
 //
 //*********************************************************
 
-cbuffer SceneConstantBuffer : register(b0)
+cbuffer PrimitiveStaticData : register(b0)
 {
-    float4 velocity;
-    float4 offset;
     float4 color;
-    float4x4 projection;
+    float2 velocity;
+    float  size;
+    float  rotation;
+};
+
+cbuffer PremitiveDynamicData : register(b1)
+{
+    float2 position;
+    float angle;
+};
+
+cbuffer ViewData : register(b2)
+{
+    float ratio;
 };
 
 struct PSInput
@@ -23,14 +34,20 @@ struct PSInput
     float4 color : COLOR;
 };
 
-PSInput VSMain(float4 position : POSITION)
+PSInput VSMain(float4 vpos : POSITION)
 {
     PSInput result;
+   
+    float sinAngle, cosAngle;
+    sincos(angle, sinAngle, cosAngle);
+    float2x2 rot = {cosAngle, sinAngle, -sinAngle, cosAngle};
 
-    result.position = mul(position + offset, projection);
-
-    float intensity = saturate((4.0f - result.position.z) / 2.0f);
-    result.color = float4(color.xyz * intensity, 1.0f);
+    float2 posL = mul(vpos, rot);
+    posL *= float2(size, size * ratio);
+    
+    result.position = float4(position + posL, length(velocity), 1.0f);
+    
+    result.color = color;
 
     return result;
 }

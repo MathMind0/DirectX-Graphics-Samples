@@ -9,58 +9,82 @@
 //
 //*********************************************************
 
-#define threadBlockSize 128
+#define threadBlockSize 64
 
-struct SceneConstantBuffer
+struct PrimitiveStaticData
 {
-    float4 velocity;
-    float4 offset;
     float4 color;
-    float4x4 projection;
-    float4 padding[9];
+    float2 velocity;
+    float  size;
+    float  rotation;
+    float  padding[256 - 4 * 8];
+};
+
+struct PrimitiveDynamicData
+{
+    float2 position;
+    float angle;
+    float padding;
 };
 
 struct IndirectCommand
 {
     uint2 cbvAddress;
+    PrimitiveDynamicData cbDynamicData;
     uint4 drawArguments;
 };
 
 cbuffer RootConstants : register(b0)
 {
-    float xOffset;        // Half the width of the triangles.
-    float zOffset;        // The z offset for the triangle vertices.
-    float cullOffset;    // The culling plane offset in homogenous space.
+    float4 cullBox;    
     float commandCount;    // The number of commands to be processed.
+    float deltaTime;
 };
 
-StructuredBuffer<SceneConstantBuffer> cbv                : register(t0);    // SRV: Wrapped constant buffers
-StructuredBuffer<IndirectCommand> inputCommands            : register(t1);    // SRV: Indirect commands
-AppendStructuredBuffer<IndirectCommand> outputCommands    : register(u0);    // UAV: Processed indirect commands
+StructuredBuffer<PrimitiveStaticData> cbv                : register(t0);    // SRV: Wrapped constant buffers
+RWStructuredBuffer<IndirectCommand> inputCommands        : register(u0);    // UAV: Indirect commands
+AppendStructuredBuffer<IndirectCommand> outputCommands   : register(u1);    // UAV: Processed indirect commands
 
 [numthreads(threadBlockSize, 1, 1)]
-void CSMain(uint3 groupId : SV_GroupID, uint groupIndex : SV_GroupIndex)
+void CSMain(uint3 dispatchID : SV_DispatchThreadID)
 {
     // Each thread of the CS operates on one of the indirect commands.
-    uint index = (groupId.x * threadBlockSize) + groupIndex;
+    uint index = dispatchID.x;
 
-    // Don't attempt to access commands that don't exist if more threads are allocated
-    // than commands.
+    // Don't attempt to access commands that don't exist if more threads are allocated than commands.
     if (index < commandCount)
     {
-        // Project the left and right bounds of the triangle into homogenous space.
-        float4 left = float4(-xOffset, 0.0f, zOffset, 1.0f) + cbv[index].offset;
-        left = mul(left, cbv[index].projection);
-        left /= left.w;
+        PrimitiveStaticData cb = cbv[index];
+        IndirectCommand cmd = inputCommands[index];
 
-        float4 right = float4(xOffset, 0.0f, zOffset, 1.0f) + cbv[index].offset;
-        right = mul(right, cbv[index].projection);
-        right /= right.w;
+        cmd.cbDynamicData.position += cb.velocity * deltaTime;
+        cmd.cbDynamicData.angle += cb.rotation * deltaTime;
 
-        // Only draw triangles that are within the culling space.
-        if (-cullOffset < right.x && left.x < cullOffset)
+        if (cmd.cbDynamicData.position.x < -1.0f)
         {
-            outputCommands.Append(inputCommands[index]);
+            cmd.cbDynamicData.position.x += 2.0f;
+        }
+        else if (cmd.cbDynamicData.position.x > 1.0f)
+        {
+            cmd.cbDynamicData.position.x -= 2.0f;
+        }
+
+        if (cmd.cbDynamicData.position.y < -1.0f)
+        {
+            cmd.cbDynamicData.position.y += 2.0f;
+        }
+        else if (cmd.cbDynamicData.position.y > 1.0f)
+        {
+            cmd.cbDynamicData.position.y -= 2.0f;
+        }
+
+        inputCommands[index].cbDynamicData.position = cmd.cbDynamicData.position;
+        inputCommands[index].cbDynamicData.angle = cmd.cbDynamicData.angle;
+        
+        // Only draw triangles that are within the culling box.
+        if (all(cmd.cbDynamicData.position >= cullBox.xy) && all(cmd.cbDynamicData.position < cullBox.zw))
+        {
+            outputCommands.Append(cmd);
         }
     }
 }

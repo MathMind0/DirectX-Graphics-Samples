@@ -10,6 +10,8 @@
 //*********************************************************
 
 #pragma once
+#include <iostream>
+#include <ostream>
 #include <stdexcept>
 
 // Note that while ComPtr is used to manage the lifetime of resources on the CPU,
@@ -40,6 +42,16 @@ inline void ThrowIfFailed(HRESULT hr)
 {
     if (FAILED(hr))
     {
+        throw HrException(hr);
+    }
+}
+
+inline void ThrowIfFailedWithError(HRESULT hr, const char* filename, ID3DBlob** error)
+{
+    if (FAILED(hr))
+    {
+        std::string errorMessage (static_cast<const char*>((*error)->GetBufferPointer()));
+        std::cerr << filename << ": " << errorMessage.c_str() << std::endl;
         throw HrException(hr);
     }
 }
